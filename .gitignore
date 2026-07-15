@@ -1,0 +1,17 @@
+﻿# virtual environments
+.venv/
+.venv-*/
+
+# python caches
+__pycache__/
+*.pyc
+
+# editor settings
+.vscode/
+
+# OS noise
+Thumbs.db
+desktop.ini
+
+# runtime bundles / packaged builds
+*.zip

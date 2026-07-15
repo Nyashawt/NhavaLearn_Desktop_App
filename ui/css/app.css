@@ -1,0 +1,236 @@
+/* NhavaLearn Desktop — visual identity inherited from Fundo LMS.
+   Palette: primary blue #2563EB, purple #7C3AED, cyan #06B6D4,
+   gold accent #FDE68A (reserved for the single most important number/word),
+   dark navy #0F172A. Signature: the 135° blue→purple→cyan gradient. */
+
+:root {
+  --blue: #2563EB;
+  --purple: #7C3AED;
+  --cyan: #06B6D4;
+  --gold: #FDE68A;
+  --navy: #0F172A;
+  --grad: linear-gradient(135deg, var(--blue), var(--purple), var(--cyan));
+  --bg: #F1F5F9;
+  --card: #FFFFFF;
+  --text: #0F172A;
+  --muted: #64748B;
+  --border: #E2E8F0;
+  --danger: #DC2626;
+  --radius: 14px;
+  --shadow: 0 1px 3px rgba(15, 23, 42, .08), 0 4px 16px rgba(15, 23, 42, .06);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+}
+#app { height: 100vh; display: flex; flex-direction: column; }
+
+h1, h2, h3 { margin: 0 0 .5rem; }
+p { margin: 0 0 .75rem; }
+a { color: var(--blue); }
+
+/* ---------- boot ---------- */
+.boot-screen {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  background: var(--grad); color: #fff;
+}
+.boot-logo { font-size: 56px; }
+
+/* ---------- buttons & inputs ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: none; border-radius: 10px; cursor: pointer;
+  padding: 10px 18px; font-size: 14px; font-weight: 600;
+  background: var(--blue); color: #fff;
+  transition: filter .12s ease;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+.btn.secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
+.btn.danger { background: var(--danger); }
+.btn.ghost { background: transparent; color: var(--blue); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.sm { padding: 6px 12px; font-size: 13px; }
+
+label.field { display: block; margin-bottom: 14px; font-weight: 600; font-size: 13px; color: var(--muted); }
+label.field input, label.field select {
+  display: block; width: 100%; margin-top: 6px;
+  padding: 10px 12px; font-size: 15px; color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; background: #fff;
+}
+label.field input:focus, label.field select:focus {
+  outline: none; border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .15);
+}
+
+.error-msg {
+  background: #FEF2F2; border: 1px solid #FECACA; color: var(--danger);
+  padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 14px;
+}
+
+/* ---------- toast ---------- */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--navy); color: #fff; padding: 10px 20px;
+  border-radius: 10px; box-shadow: var(--shadow); font-size: 14px;
+  opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 100;
+}
+#toast.show { opacity: 1; }
+
+/* ---------- auth / wizard layout ---------- */
+.split-screen { flex: 1; display: flex; min-height: 0; }
+.split-hero {
+  flex: 1; background: var(--grad); color: #fff;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 56px; gap: 8px;
+}
+.split-hero .big { font-size: 40px; font-weight: 800; line-height: 1.1; }
+.split-hero .big .gold { color: var(--gold); }
+.split-hero p { color: rgba(255, 255, 255, .85); max-width: 40ch; font-size: 16px; }
+.split-form {
+  width: 460px; background: var(--card); padding: 56px 48px;
+  display: flex; flex-direction: column; justify-content: center;
+  overflow-y: auto;
+}
+
+/* ---------- app frame ---------- */
+.frame { flex: 1; display: flex; min-height: 0; }
+.sidebar {
+  width: 230px; background: var(--navy); color: #CBD5E1;
+  display: flex; flex-direction: column; padding: 18px 12px;
+}
+.sidebar .brand {
+  display: flex; align-items: center; gap: 10px;
+  color: #fff; font-weight: 800; font-size: 18px; padding: 6px 10px 20px;
+}
+.sidebar .brand i {
+  background: var(--grad); border-radius: 8px;
+  width: 32px; height: 32px; display: grid; place-items: center; font-size: 17px;
+}
+.sidebar nav { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.sidebar nav a {
+  display: flex; align-items: center; gap: 10px;
+  color: inherit; text-decoration: none; font-size: 14px; font-weight: 600;
+  padding: 10px 12px; border-radius: 10px;
+}
+.sidebar nav a:hover { background: rgba(255, 255, 255, .07); color: #fff; }
+.sidebar nav a.active { background: var(--blue); color: #fff; }
+.sidebar .whoami { padding: 12px 10px; border-top: 1px solid rgba(255,255,255,.12); font-size: 13px; }
+.sidebar .whoami .name { color: #fff; font-weight: 700; }
+.sidebar .whoami .role { text-transform: capitalize; color: var(--gold); font-size: 12px; }
+
+.main { flex: 1; overflow-y: auto; padding: 32px 40px; min-width: 0; }
+.page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+.page-head .sub { color: var(--muted); font-size: 14px; }
+
+/* ---------- cards ---------- */
+.card {
+  background: var(--card); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 22px;
+}
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+.stat-tile { position: relative; overflow: hidden; }
+.stat-tile .num { font-size: 34px; font-weight: 800; }
+.stat-tile .lbl { color: var(--muted); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.stat-tile .icon {
+  position: absolute; right: 16px; top: 16px; font-size: 22px; color: #fff;
+  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+}
+.tint-blue .icon { background: var(--blue); }
+.tint-purple .icon { background: var(--purple); }
+.tint-cyan .icon { background: var(--cyan); }
+
+.hero-banner {
+  background: var(--grad); color: #fff; border-radius: var(--radius);
+  padding: 28px 32px; margin-bottom: 24px;
+}
+.hero-banner .school { color: var(--gold); font-weight: 800; }
+
+.item-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; transition: transform .1s ease; }
+.item-card:hover { transform: translateY(-2px); }
+.item-card .meta { color: var(--muted); font-size: 13px; }
+
+.empty-state {
+  text-align: center; color: var(--muted); padding: 56px 20px;
+}
+.empty-state i { font-size: 44px; display: block; margin-bottom: 10px; color: var(--border); }
+
+/* ---------- tables ---------- */
+table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.data th { text-align: left; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 10px 12px; border-bottom: 2px solid var(--border); }
+table.data td { padding: 12px; border-bottom: 1px solid var(--border); }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: capitalize; }
+.badge.admin { background: #EDE9FE; color: var(--purple); }
+.badge.teacher { background: #DBEAFE; color: var(--blue); }
+.badge.supervisor { background: #CFFAFE; color: #0E7490; }
+.badge.inactive { background: #F1F5F9; color: var(--muted); }
+
+/* ---------- modal ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, .5);
+  display: grid; place-items: center; z-index: 50;
+}
+.modal { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px; width: 440px; max-width: 92vw; }
+.modal h3 { margin-bottom: 18px; }
+.modal .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* ---------- editor ---------- */
+.editor-layout { display: flex; gap: 20px; align-items: flex-start; }
+.pages-panel { width: 220px; flex-shrink: 0; padding: 14px; }
+.pages-panel .page-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
+  border: 1px solid transparent; margin-bottom: 4px;
+}
+.pages-panel .page-item:hover { background: var(--bg); }
+.pages-panel .page-item.active { background: #DBEAFE; border-color: var(--blue); color: var(--blue); }
+.pages-panel .page-item .n {
+  background: var(--border); color: var(--muted); border-radius: 6px;
+  min-width: 22px; height: 22px; display: grid; place-items: center; font-size: 11px;
+}
+.pages-panel .page-item.active .n { background: var(--blue); color: #fff; }
+.editor-main { flex: 1; min-width: 0; }
+.editor-main .card { padding: 0; overflow: hidden; }
+.editor-title-row { display: flex; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.editor-title-row input {
+  flex: 1; border: none; font-size: 17px; font-weight: 700; outline: none; color: var(--text);
+}
+#quill-editor { min-height: 420px; font-size: 16px; }
+.ql-toolbar.ql-snow { border: none; border-bottom: 1px solid var(--border); }
+.ql-container.ql-snow { border: none; }
+.editor-hint { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+.save-state { font-size: 13px; font-weight: 600; color: var(--muted); }
+.save-state.saved { color: #16A34A; }
+
+/* ---------- presenter control bar ---------- */
+.present-bar {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--navy); color: #fff; border-radius: 999px;
+  box-shadow: var(--shadow); padding: 10px 18px;
+  display: flex; align-items: center; gap: 14px; z-index: 60;
+}
+.present-bar .pg { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--gold); }
+.present-bar button {
+  background: rgba(255,255,255,.12); border: none; color: #fff;
+  width: 38px; height: 38px; border-radius: 50%; cursor: pointer; font-size: 16px;
+}
+.present-bar button:hover { background: rgba(255,255,255,.25); }
+.present-bar button.stop { background: var(--danger); width: auto; border-radius: 999px; padding: 0 16px; font-size: 14px; font-weight: 700; }
+
+/* ---------- reading view (supervisor / preview) ---------- */
+.lesson-content { line-height: 1.7; }
+.lesson-content.ql-editor { padding: 0; height: auto; overflow: visible; }
+.lesson-content img { max-width: 100%; border-radius: 8px; }
+.lesson-content video, #quill-editor video {
+  max-width: 100%; border-radius: 8px; background: #000; display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
