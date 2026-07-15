@@ -493,6 +493,85 @@ class Api:
             return {"ok": True}
         finally:
             conn.close()
+            
+    # ------------------------------------------------------- AI generation
+
+    def ai_get_status(self):
+        e = self._require()
+        if e:
+            return e
+        from . import ai_generator
+        return {"ok": True, **ai_generator.get_ai_status()}
+
+    def ai_generate_quiz(self, lesson_id, topic, num_questions, grade):
+        e = self._require("teacher")
+        if e:
+            return e
+        conn = db.connect()
+        try:
+            if not self._owns_lesson(conn, lesson_id):
+                return _err("You can only generate content for your own lessons.")
+        finally:
+            conn.close()
+        from . import ai_generator, ai_html_formatter
+        try:
+            result = ai_generator.generate_quiz(topic, int(num_questions), grade)
+        except ai_generator.AIUnavailable as ex:
+            return _err(str(ex))
+        return {"ok": True, "html": ai_html_formatter.quiz_text_to_quill_html(result["content"]), "meta": result["meta"]}
+
+    def ai_generate_flashcards(self, lesson_id, topic, num_cards, grade):
+        e = self._require("teacher")
+        if e:
+            return e
+        conn = db.connect()
+        try:
+            if not self._owns_lesson(conn, lesson_id):
+                return _err("You can only generate content for your own lessons.")
+        finally:
+            conn.close()
+        from . import ai_generator, ai_html_formatter
+        try:
+            result = ai_generator.generate_flashcards(topic, int(num_cards), grade)
+        except ai_generator.AIUnavailable as ex:
+            return _err(str(ex))
+        return {"ok": True, "html": ai_html_formatter.flashcards_text_to_quill_html(result["content"]), "meta": result["meta"]}
+
+    def ai_generate_lesson_draft(self, lesson_id, topic, grade):
+        e = self._require("teacher")
+        if e:
+            return e
+        conn = db.connect()
+        try:
+            if not self._owns_lesson(conn, lesson_id):
+                return _err("You can only generate content for your own lessons.")
+        finally:
+            conn.close()
+        from . import ai_generator, ai_html_formatter
+        try:
+            result = ai_generator.generate_lesson_draft(topic, grade)
+        except ai_generator.AIUnavailable as ex:
+            return _err(str(ex))
+        return {"ok": True, "html": ai_html_formatter.lesson_plan_text_to_quill_html(result["content"])}
+
+    # -------------------------------------------------------- AI settings (admin)
+
+    def get_ai_settings(self):
+        e = self._require("admin")
+        if e:
+            return e
+        from . import ai_settings
+        s = ai_settings.get_ai_settings()
+        s["api_key_set"] = bool(s.pop("api_key"))  # never send the raw key back to the UI
+        return {"ok": True, "settings": s}
+
+    def update_ai_settings(self, provider, api_key, model_filename):
+        e = self._require("admin")
+        if e:
+            return e
+        from . import ai_settings
+        ai_settings.set_ai_settings(provider=provider, api_key=api_key, model_filename=model_filename)
+        return {"ok": True}        
 
     # ------------------------------------------------------------------ media
 

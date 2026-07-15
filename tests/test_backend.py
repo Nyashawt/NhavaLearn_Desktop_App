@@ -263,3 +263,12 @@ r = api.test_pages(t1, False); assert len(r["pages"]) == 4
 print("  ok: pages layout restored")
 
 print("\nONE-PAGER TESTS PASSED — ALL SUITES GREEN")
+
+print("== AI generation ==")
+ok(api.login("bncube", "secret1"), "teacher login for AI")
+r = api.ai_get_status(); ok(r, "ai status check")
+fail(api.ai_generate_quiz(l1, "Fractions", 5, "Grade 6"), "generate with no provider configured")
+ok(api.login("tmoyo", "secret1"), "admin login for AI settings")
+ok(api.update_ai_settings("cloud", "sk-test-fake-key", None), "admin sets API key")
+r = api.get_ai_settings(); ok(r, "admin reads AI settings"); assert r["settings"]["api_key_set"] is True
+fail(api.update_ai_settings("cloud", "x", None), "teacher-only check: use non-admin login here instead")

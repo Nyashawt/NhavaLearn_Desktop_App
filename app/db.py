@@ -139,6 +139,9 @@ MIGRATIONS = [
     # CREATE TABLE IF NOT EXISTS doesn't alter existing tables, so column
     # additions go here; each is a no-op once applied.
     "ALTER TABLE tests ADD COLUMN layout TEXT NOT NULL DEFAULT 'pages'",
+    "ALTER TABLE settings ADD COLUMN ai_provider TEXT NOT NULL DEFAULT 'cloud'",
+    "ALTER TABLE settings ADD COLUMN ai_api_key TEXT",
+    "ALTER TABLE settings ADD COLUMN ai_model_filename TEXT",
 ]
 
 

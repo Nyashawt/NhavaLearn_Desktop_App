@@ -486,6 +486,8 @@ routes.editor = async (lessonId, classId) => {
         <div id="page-list"></div>
         <button class="btn ghost sm" id="add-page" style="width:100%;justify-content:center;margin-top:6px">
           <i class="bi bi-plus-lg"></i> Add page</button>
+		<button class="btn ghost sm" id="ai-generate" style="width:100%;justify-content:center;margin-top:2px">
+          <i class="bi bi-stars"></i> Generate with AI</button>
         <button class="btn ghost sm" id="add-sim" style="width:100%;justify-content:center;margin-top:2px">
           <i class="bi bi-joystick"></i> Add simulation</button>
       </div>
@@ -672,6 +674,43 @@ routes.editor = async (lessonId, classId) => {
         });
       });
   };
+  
+  document.getElementById("ai-generate").onclick = async () => {
+  const topic = prompt("Topic for this content?");
+  if (!topic) return;
+
+  const btn = document.getElementById("ai-generate");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Generating…';
+
+  const res = await api().ai_generate_quiz(
+      lessonId,
+      topic,
+      10,
+      "Grade 6"
+  );
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-stars"></i> Generate with AI';
+
+  if (!res.ok)
+      return toast(res.error);
+
+  const range = quill.getSelection(true) || {
+      index: quill.getLength()
+  };
+
+  quill.clipboard.dangerouslyPasteHTML(
+      range.index,
+      res.html
+  );
+
+  setDirty(true);
+
+  toast(
+      `Generated ${res.meta.generated}/${res.meta.requested} questions`
+  );
+};
 
   document.getElementById("preview-page").onclick = () => {
     const title = document.getElementById("page-title").value;
