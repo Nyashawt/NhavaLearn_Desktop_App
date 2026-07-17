@@ -197,7 +197,8 @@ function frame(active, contentHtml) {
   const links = [["dashboard", "bi-house", "Home"], ["classes", "bi-collection", "Classes"]];
   if (USER.role === "admin") {
     links.push(["sims", "bi-joystick", "Simulations"],
-               ["users", "bi-people", "Accounts"], ["settings", "bi-gear", "Settings"]);
+               ["users", "bi-people", "Accounts"], ["settings", "bi-gear", "Settings"],
+               ["aiSettings", "bi-stars", "AI Settings"]);
   }
   if (USER.role === "supervisor") {
     links.push(["users", "bi-people", "Accounts"]);
@@ -1370,5 +1371,57 @@ routes.settings = async () => {
   document.getElementById("sub-add").onclick = async () => {
     const r = await api().create_subject(document.getElementById("sub-name").value);
     r.ok ? go("settings") : toast(r.error);
+  };
+};
+
+/* ======================== AI settings (admin) ========================= */
+
+routes.aiSettings = async () => {
+  const s = await api().get_ai_settings();
+  if (!s.ok) { toast(s.error); return go("dashboard"); }
+  const status = await api().ai_get_status();
+  const settings = s.settings;
+
+  const localBadge = status.ok && status.local_model_available
+    ? `<span class="badge">found: ${esc(status.local_model_info?.model || "a .gguf model")}</span>`
+    : `<span class="badge inactive">no local model found</span>`;
+  const cloudBadge = status.ok && status.cloud_configured
+    ? `<span class="badge">key configured</span>`
+    : `<span class="badge inactive">no key configured</span>`;
+
+  frame("aiSettings", `
+    <div class="page-head"><div><h2>AI Settings</h2>
+      <div class="sub">Configure how teachers generate quizzes, flashcards and lesson drafts</div></div></div>
+    <div class="card" style="max-width:560px;margin-bottom:20px">
+      <h3 style="font-size:16px">Provider</h3>
+      <label class="field">Mode
+        <select id="ai-provider">
+          <option value="cloud" ${settings.provider === "cloud" ? "selected" : ""}>Cloud (Anthropic) only</option>
+          <option value="local" ${settings.provider === "local" ? "selected" : ""}>Local model only (offline)</option>
+          <option value="auto" ${settings.provider === "auto" ? "selected" : ""}>Cloud first, fall back to local</option>
+        </select>
+      </label>
+      <p class="sub" style="color:var(--muted)">Local generation runs fully offline on this laptop's CPU. Cloud generation needs
+        an internet connection (the 4G dongle) and an Anthropic API key.</p>
+    </div>
+    <div class="card" style="max-width:560px;margin-bottom:20px">
+      <h3 style="font-size:16px">Cloud (Anthropic) ${cloudBadge}</h3>
+      <label class="field">API key <input id="ai-key" type="password" placeholder="${settings.api_key_set ? "•••••••• (leave blank to keep current key)" : "sk-ant-…"}"></label>
+    </div>
+    <div class="card" style="max-width:560px">
+      <h3 style="font-size:16px">Local model ${localBadge}</h3>
+      <label class="field">GGUF filename in the models folder <input id="ai-model" value="${esc(settings.model_filename || "")}" placeholder="leave blank to auto-pick the largest .gguf found"></label>
+      <p class="sub" style="color:var(--muted)">Copy a .gguf model file into <code>%LOCALAPPDATA%\\NhavaLearn\\models</code>
+        on this laptop, then enter its filename here (or leave blank to use the largest one found automatically).</p>
+      <button class="btn" id="ai-save"><i class="bi bi-check2"></i> Save changes</button>
+    </div>`);
+
+  document.getElementById("ai-save").onclick = async () => {
+    const provider = document.getElementById("ai-provider").value;
+    const apiKey = document.getElementById("ai-key").value || null;
+    const modelFilename = document.getElementById("ai-model").value || null;
+    const r = await api().update_ai_settings(provider, apiKey, modelFilename);
+    r.ok ? go("aiSettings") : toast(r.error);
+    if (r.ok) toast("AI settings saved");
   };
 };
