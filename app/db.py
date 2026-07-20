@@ -122,17 +122,50 @@ CREATE TABLE IF NOT EXISTS test_questions (
     marks           INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS documents (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    title          TEXT NOT NULL,
+    subject_id     INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+    grade          TEXT NOT NULL,
+    filename       TEXT NOT NULL UNIQUE,
+    original_name  TEXT NOT NULL,
+    extracted_text TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
+    title, extracted_text, content='documents', content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
+    INSERT INTO documents_fts(rowid, title, extracted_text) VALUES (new.id, new.title, new.extracted_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
+    INSERT INTO documents_fts(documents_fts, rowid, title, extracted_text) VALUES ('delete', old.id, old.title, old.extracted_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
+    INSERT INTO documents_fts(documents_fts, rowid, title, extracted_text) VALUES ('delete', old.id, old.title, old.extracted_text);
+    INSERT INTO documents_fts(rowid, title, extracted_text) VALUES (new.id, new.title, new.extracted_text);
+END;
+
 CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_lessons_class   ON lessons(class_id);
 CREATE INDEX IF NOT EXISTS idx_pages_lesson    ON lesson_pages(lesson_id, page_number);
 CREATE INDEX IF NOT EXISTS idx_tests_class     ON tests(class_id);
 CREATE INDEX IF NOT EXISTS idx_questions_test  ON test_questions(test_id, question_number);
+CREATE INDEX IF NOT EXISTS idx_documents_scope ON documents(grade, subject_id);
 """
 
 DEFAULT_SUBJECTS = [
     "Mathematics", "English", "Science", "Shona", "Ndebele",
     "Heritage Studies", "Agriculture", "ICT",
 ]
+
+# Zimbabwean grade/form levels — fixed list, used by both the class-creation
+# dropdown and the document-upload dropdown so the two can be matched exactly.
+GRADES = [f"Grade {n}" for n in range(1, 8)] + [f"Form {n}" for n in range(1, 7)]
 
 
 MIGRATIONS = [
@@ -142,6 +175,7 @@ MIGRATIONS = [
     "ALTER TABLE settings ADD COLUMN ai_provider TEXT NOT NULL DEFAULT 'cloud'",
     "ALTER TABLE settings ADD COLUMN ai_api_key TEXT",
     "ALTER TABLE settings ADD COLUMN ai_model_filename TEXT",
+    "ALTER TABLE classes ADD COLUMN grade TEXT",
 ]
 
 

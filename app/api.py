@@ -273,22 +273,30 @@ class Api:
         finally:
             conn.close()
 
-    def create_class(self, name):
+    def create_class(self, name, grade=None):
         e = self._require("teacher")
         if e:
             return e
         if not (name or "").strip():
             return _err("Enter a class name.")
+        if grade and grade not in db.GRADES:
+            return _err("Choose a valid grade.")
         conn = db.connect()
         try:
             cur = conn.execute(
-                "INSERT INTO classes (name, teacher_id) VALUES (?, ?)",
-                (name.strip(), self._current_user["id"]),
+                "INSERT INTO classes (name, teacher_id, grade) VALUES (?, ?, ?)",
+                (name.strip(), self._current_user["id"], grade or None),
             )
             conn.commit()
             return {"ok": True, "id": cur.lastrowid}
         finally:
             conn.close()
+
+    def list_grades(self):
+        e = self._require()
+        if e:
+            return e
+        return {"ok": True, "grades": db.GRADES}
 
     def delete_class(self, class_id):
         e = self._require("teacher")
@@ -503,56 +511,135 @@ class Api:
         from . import ai_generator
         return {"ok": True, **ai_generator.get_ai_status()}
 
-    def ai_generate_quiz(self, lesson_id, topic, num_questions, grade):
+    def ai_generate_and_create(self, class_id, kind, subject_id, topic, count=10):
+        """Generate a Lesson or a Test from the Classes screen and create the
+        real record directly — replaces the old lesson-editor 'Generate with
+        AI' button, which only pasted HTML into whatever page was open."""
         e = self._require("teacher")
         if e:
             return e
+        if kind not in ("lesson", "test"):
+            return _err("Choose Lesson or Test.")
+        if not (topic or "").strip():
+            return _err("Enter a topic.")
         conn = db.connect()
         try:
-            if not self._owns_lesson(conn, lesson_id):
-                return _err("You can only generate content for your own lessons.")
+            if not self._owns_class(conn, class_id):
+                return _err("You can only generate content for your own classes.")
+            cls = conn.execute("SELECT grade FROM classes WHERE id = ?", (class_id,)).fetchone()
         finally:
             conn.close()
-        from . import ai_generator, ai_html_formatter
-        try:
-            result = ai_generator.generate_quiz(topic, int(num_questions), grade)
-        except ai_generator.AIUnavailable as ex:
-            return _err(str(ex))
-        return {"ok": True, "html": ai_html_formatter.quiz_text_to_quill_html(result["content"]), "meta": result["meta"]}
+        grade = cls["grade"] if cls else None
 
-    def ai_generate_flashcards(self, lesson_id, topic, num_cards, grade):
-        e = self._require("teacher")
-        if e:
-            return e
-        conn = db.connect()
-        try:
-            if not self._owns_lesson(conn, lesson_id):
-                return _err("You can only generate content for your own lessons.")
-        finally:
-            conn.close()
         from . import ai_generator, ai_html_formatter
         try:
-            result = ai_generator.generate_flashcards(topic, int(num_cards), grade)
+            if kind == "lesson":
+                result = ai_generator.generate_lesson_draft(topic, grade, subject_id)
+                html_ = ai_html_formatter.lesson_plan_text_to_quill_html(result["content"])
+                new_id = self._create_lesson_row(class_id, topic.strip(), subject_id)
+                self._set_page_content(new_id, html_)
+                return {"ok": True, "kind": "lesson", "id": new_id}
+            else:
+                result = ai_generator.generate_quiz(topic, int(count), grade, subject_id)
+                questions = ai_generator.parse_quiz_to_questions(result["content"])
+                if not questions:
+                    return _err("AI generation did not return any usable questions. Try a different topic.")
+                new_id = self._create_test_with_questions(class_id, topic.strip(), subject_id, questions)
+                return {"ok": True, "kind": "test", "id": new_id, "meta": result["meta"]}
         except ai_generator.AIUnavailable as ex:
             return _err(str(ex))
-        return {"ok": True, "html": ai_html_formatter.flashcards_text_to_quill_html(result["content"]), "meta": result["meta"]}
 
-    def ai_generate_lesson_draft(self, lesson_id, topic, grade):
-        e = self._require("teacher")
-        if e:
-            return e
+    def _create_lesson_row(self, class_id, title, subject_id):
         conn = db.connect()
         try:
-            if not self._owns_lesson(conn, lesson_id):
-                return _err("You can only generate content for your own lessons.")
+            cur = conn.execute(
+                "INSERT INTO lessons (class_id, subject_id, teacher_id, title) VALUES (?, ?, ?, ?)",
+                (class_id, subject_id or None, self._current_user["id"], title),
+            )
+            lesson_id = cur.lastrowid
+            conn.execute(
+                "INSERT INTO lesson_pages (lesson_id, page_number, title) VALUES (?, 1, 'Page 1')",
+                (lesson_id,),
+            )
+            conn.commit()
+            return lesson_id
         finally:
             conn.close()
-        from . import ai_generator, ai_html_formatter
+
+    def _set_page_content(self, lesson_id, content_html):
+        conn = db.connect()
         try:
-            result = ai_generator.generate_lesson_draft(topic, grade)
-        except ai_generator.AIUnavailable as ex:
-            return _err(str(ex))
-        return {"ok": True, "html": ai_html_formatter.lesson_plan_text_to_quill_html(result["content"])}
+            conn.execute(
+                "UPDATE lesson_pages SET content_html = ? WHERE lesson_id = ? AND page_number = 1",
+                (content_html, lesson_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _create_test_with_questions(self, class_id, title, subject_id, questions):
+        conn = db.connect()
+        try:
+            cur = conn.execute(
+                "INSERT INTO tests (class_id, subject_id, teacher_id, title) VALUES (?, ?, ?, ?)",
+                (class_id, subject_id or None, self._current_user["id"], title),
+            )
+            test_id = cur.lastrowid
+            for i, q in enumerate(questions, start=1):
+                conn.execute(
+                    """INSERT INTO test_questions
+                       (test_id, question_number, kind, prompt, options_json, answer, explanation, marks)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (test_id, i, q["kind"], q["prompt"], json.dumps(q["options"]),
+                     q["answer"], q["explanation"], q["marks"]),
+                )
+            conn.commit()
+            return test_id
+        finally:
+            conn.close()
+
+    # -------------------------------------------------------- Library documents (admin upload, teacher-read)
+
+    def list_documents(self, grade=None, subject_id=None):
+        e = self._require()
+        if e:
+            return e
+        from . import documents
+        return {"ok": True, "documents": documents.list_documents(grade, subject_id)}
+
+    def upload_document(self, title, subject_id, grade):
+        e = self._require("admin")
+        if e:
+            return e
+        if not (title or "").strip():
+            return _err("Enter a document title.")
+        if grade not in db.GRADES:
+            return _err("Choose a valid grade.")
+        if self._main_window is None:
+            return _err("File dialog unavailable.")
+        fd = getattr(webview, "FileDialog", None)
+        dialog_type = fd.OPEN if fd else webview.OPEN_DIALOG
+        picked = self._main_window.create_file_dialog(
+            dialog_type, allow_multiple=False,
+            file_types=("Documents (*.pdf;*.docx)", "All files (*.*)"),
+        )
+        if not picked:
+            return {"ok": True, "cancelled": True}
+        src_path = picked[0] if isinstance(picked, (list, tuple)) else picked
+        if not os.path.isfile(src_path):
+            return _err("That file could not be read.")
+        ext = os.path.splitext(src_path)[1].lower()
+        if ext not in (".pdf", ".docx"):
+            return _err("Use a PDF or Word (.docx) file.")
+        from . import documents
+        return documents.store_document(src_path, title.strip(), subject_id or None, grade)
+
+    def delete_document(self, document_id):
+        e = self._require("admin")
+        if e:
+            return e
+        from . import documents
+        return documents.delete_document(document_id)
 
     # -------------------------------------------------------- AI settings (admin)
 

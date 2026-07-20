@@ -198,7 +198,8 @@ function frame(active, contentHtml) {
   if (USER.role === "admin") {
     links.push(["sims", "bi-joystick", "Simulations"],
                ["users", "bi-people", "Accounts"], ["settings", "bi-gear", "Settings"],
-               ["aiSettings", "bi-stars", "AI Settings"]);
+               ["aiSettings", "bi-stars", "AI Settings"],
+               ["documents", "bi-file-earmark-text", "Library Documents"]);
   }
   if (USER.role === "supervisor") {
     links.push(["users", "bi-people", "Accounts"]);
@@ -292,22 +293,31 @@ routes.classes = async () => {
     el.onclick = () => go("lessons", Number(el.dataset.id)));
 
   const nb = document.getElementById("new-class");
-  if (nb) nb.onclick = () => modal(`
+  if (nb) nb.onclick = async () => {
+    const g = await api().list_grades();
+    modal(`
       <h3>New class</h3>
       <label class="field">Class name <input id="m-name" placeholder="e.g. Grade 6 Blue" autofocus></label>
+      <label class="field">Grade / Form
+        <select id="m-grade"><option value="">— none —</option>
+          ${g.ok ? g.grades.map(gr => `<option value="${esc(gr)}">${esc(gr)}</option>`).join("") : ""}
+        </select></label>
       <div class="actions">
         <button class="btn secondary" id="m-cancel">Cancel</button>
         <button class="btn" id="m-ok">Create class</button>
       </div>`,
-    bd => {
-      bd.querySelector("#m-cancel").onclick = () => bd.remove();
-      bd.querySelector("#m-ok").onclick = async () => {
-        const res = await api().create_class(bd.querySelector("#m-name").value);
-        if (!res.ok) return toast(res.error);
-        bd.remove();
-        go("lessons", res.id);
-      };
-    });
+      bd => {
+        bd.querySelector("#m-cancel").onclick = () => bd.remove();
+        bd.querySelector("#m-ok").onclick = async () => {
+          const res = await api().create_class(
+            bd.querySelector("#m-name").value,
+            bd.querySelector("#m-grade").value || null);
+          if (!res.ok) return toast(res.error);
+          bd.remove();
+          go("lessons", res.id);
+        };
+      });
+  };
 };
 
 /* =============================== lessons =============================== */
@@ -369,6 +379,7 @@ routes.lessons = async (classId) => {
           &nbsp; <a href="#" id="back">‹ All classes</a></div>
       </div>
       ${isOwner ? `<div style="display:flex;gap:10px">
+        <button class="btn secondary" id="ai-generate-class"><i class="bi bi-stars"></i> Generate with AI</button>
         <button class="btn secondary" id="new-test"><i class="bi bi-clipboard-plus"></i> New test</button>
         <button class="btn" id="new-lesson"><i class="bi bi-plus-lg"></i> New lesson</button>
       </div>` : ""}
@@ -457,6 +468,52 @@ routes.lessons = async (classId) => {
         };
       });
   };
+
+  const ag = document.getElementById("ai-generate-class");
+  if (ag) ag.onclick = async () => {
+    const subs = await api().list_subjects();
+    modal(`
+      <h3>Generate with AI</h3>
+      <label class="field">What do you want to create?
+        <select id="m-kind">
+          <option value="lesson">Lesson</option>
+          <option value="test">Test (quiz)</option>
+        </select></label>
+      <label class="field">Subject
+        <select id="m-subj"><option value="">— none —</option>
+          ${subs.subjects.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}
+        </select></label>
+      <label class="field">Topic <input id="m-topic" placeholder="e.g. Fractions — adding and subtracting" autofocus></label>
+      <label class="field" id="m-count-field">Number of questions <input id="m-count" type="number" min="1" max="20" value="10"></label>
+      <div class="actions">
+        <button class="btn secondary" id="m-cancel">Cancel</button>
+        <button class="btn" id="m-ok">Generate</button>
+      </div>`,
+      bd => {
+        const kindSel = bd.querySelector("#m-kind");
+        const countField = bd.querySelector("#m-count-field");
+        const syncCount = () => countField.style.display = kindSel.value === "test" ? "" : "none";
+        kindSel.onchange = syncCount;
+        syncCount();
+        bd.querySelector("#m-cancel").onclick = () => bd.remove();
+        bd.querySelector("#m-ok").onclick = async () => {
+          const topic = bd.querySelector("#m-topic").value.trim();
+          if (!topic) return toast("Enter a topic.");
+          const okBtn = bd.querySelector("#m-ok");
+          okBtn.disabled = true;
+          okBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Generating…';
+          const res = await api().ai_generate_and_create(
+            classId, kindSel.value,
+            Number(bd.querySelector("#m-subj").value) || null,
+            topic, Number(bd.querySelector("#m-count").value) || 10);
+          okBtn.disabled = false;
+          okBtn.innerHTML = "Generate";
+          if (!res.ok) return toast(res.error);
+          bd.remove();
+          go(res.kind === "test" ? "testEditor" : "editor", res.id, classId);
+        };
+      });
+  };
 };
 
 /* ============================ lesson editor ============================ */
@@ -487,8 +544,6 @@ routes.editor = async (lessonId, classId) => {
         <div id="page-list"></div>
         <button class="btn ghost sm" id="add-page" style="width:100%;justify-content:center;margin-top:6px">
           <i class="bi bi-plus-lg"></i> Add page</button>
-		<button class="btn ghost sm" id="ai-generate" style="width:100%;justify-content:center;margin-top:2px">
-          <i class="bi bi-stars"></i> Generate with AI</button>
         <button class="btn ghost sm" id="add-sim" style="width:100%;justify-content:center;margin-top:2px">
           <i class="bi bi-joystick"></i> Add simulation</button>
       </div>
@@ -675,43 +730,6 @@ routes.editor = async (lessonId, classId) => {
         });
       });
   };
-  
-  document.getElementById("ai-generate").onclick = async () => {
-  const topic = prompt("Topic for this content?");
-  if (!topic) return;
-
-  const btn = document.getElementById("ai-generate");
-  btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Generating…';
-
-  const res = await api().ai_generate_quiz(
-      lessonId,
-      topic,
-      10,
-      "Grade 6"
-  );
-
-  btn.disabled = false;
-  btn.innerHTML = '<i class="bi bi-stars"></i> Generate with AI';
-
-  if (!res.ok)
-      return toast(res.error);
-
-  const range = quill.getSelection(true) || {
-      index: quill.getLength()
-  };
-
-  quill.clipboard.dangerouslyPasteHTML(
-      range.index,
-      res.html
-  );
-
-  setDirty(true);
-
-  toast(
-      `Generated ${res.meta.generated}/${res.meta.requested} questions`
-  );
-};
 
   document.getElementById("preview-page").onclick = () => {
     const title = document.getElementById("page-title").value;
@@ -1424,4 +1442,76 @@ routes.aiSettings = async () => {
     r.ok ? go("aiSettings") : toast(r.error);
     if (r.ok) toast("AI settings saved");
   };
+};
+
+/* ======================== Library documents (admin) =================== */
+
+routes.documents = async () => {
+  const d = await api().list_documents();
+  if (!d.ok) { toast(d.error); return go("dashboard"); }
+  const subs = await api().list_subjects();
+  const grades = await api().list_grades();
+
+  const rows = d.documents.length ? `
+    <div class="card" style="padding:0">
+    <table class="data">
+      <tr><th>Title</th><th>Grade</th><th>Subject</th><th>Uploaded</th><th></th></tr>
+      ${d.documents.map(doc => `
+        <tr>
+          <td style="font-weight:600">${esc(doc.title)}</td>
+          <td>${esc(doc.grade)}</td>
+          <td>${esc(doc.subject_name || "—")}</td>
+          <td class="meta">${esc(doc.created_at)}</td>
+          <td style="text-align:right"><button class="btn sm danger doc-del" data-id="${doc.id}"><i class="bi bi-trash"></i></button></td>
+        </tr>`).join("")}
+    </table></div>`
+    : `<div class="card empty-state"><i class="bi bi-file-earmark-text"></i>
+        No library documents yet. Upload a PDF or Word document so teachers can generate AI content grounded in it.</div>`;
+
+  frame("documents", `
+    <div class="page-head">
+      <div><h2>Library Documents</h2>
+        <div class="sub">Reference material teachers draw on when generating lessons and tests with AI</div></div>
+      <button class="btn" id="doc-upload"><i class="bi bi-upload"></i> Upload document</button>
+    </div>
+    ${rows}`);
+
+  $app.querySelectorAll(".doc-del").forEach(b =>
+    b.onclick = async () => {
+      if (!confirm("Delete this document?")) return;
+      const res = await api().delete_document(Number(b.dataset.id));
+      res.ok ? go("documents") : toast(res.error);
+    });
+
+  document.getElementById("doc-upload").onclick = () => modal(`
+      <h3>Upload document</h3>
+      <label class="field">Title <input id="m-title" placeholder="e.g. Grade 6 Mathematics Syllabus" autofocus></label>
+      <label class="field">Grade / Form
+        <select id="m-grade">
+          ${grades.ok ? grades.grades.map(gr => `<option value="${esc(gr)}">${esc(gr)}</option>`).join("") : ""}
+        </select></label>
+      <label class="field">Subject
+        <select id="m-subj"><option value="">— none —</option>
+          ${subs.subjects.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}
+        </select></label>
+      <p class="sub" style="color:var(--muted)">PDF or Word (.docx) only. You'll be asked to pick the file next.</p>
+      <div class="actions">
+        <button class="btn secondary" id="m-cancel">Cancel</button>
+        <button class="btn" id="m-ok">Choose file & upload</button>
+      </div>`,
+    bd => {
+      bd.querySelector("#m-cancel").onclick = () => bd.remove();
+      bd.querySelector("#m-ok").onclick = async () => {
+        const title = bd.querySelector("#m-title").value.trim();
+        if (!title) return toast("Enter a title.");
+        const res = await api().upload_document(
+          title,
+          Number(bd.querySelector("#m-subj").value) || null,
+          bd.querySelector("#m-grade").value);
+        if (!res.ok) return toast(res.error);
+        bd.remove();
+        if (res.cancelled) return;
+        go("documents");
+      };
+    });
 };

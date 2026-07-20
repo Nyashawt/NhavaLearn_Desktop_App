@@ -267,8 +267,66 @@ print("\nONE-PAGER TESTS PASSED — ALL SUITES GREEN")
 print("== AI generation ==")
 ok(api.login("bncube", "secret1"), "teacher login for AI")
 r = api.ai_get_status(); ok(r, "ai status check")
-fail(api.ai_generate_quiz(l1, "Fractions", 5, "Grade 6"), "generate with no provider configured")
+fail(api.ai_generate_and_create(c1, "test", 1, "Fractions", 5), "generate with no provider configured")
+fail(api.ai_generate_and_create(c1, "bogus", 1, "Fractions"), "invalid kind rejected")
+fail(api.ai_generate_and_create(c1, "test", 1, ""), "empty topic rejected")
 ok(api.login("tmoyo", "secret1"), "admin login for AI settings")
 ok(api.update_ai_settings("cloud", "sk-test-fake-key", None), "admin sets API key")
 r = api.get_ai_settings(); ok(r, "admin reads AI settings"); assert r["settings"]["api_key_set"] is True
-fail(api.update_ai_settings("cloud", "x", None), "teacher-only check: use non-admin login here instead")
+ok(api.login("sdube", "secret1"), "teacher 2 login")
+fail(api.update_ai_settings("cloud", "x", None), "teacher updating AI settings (admin-only)")
+fail(api.ai_generate_and_create(c1, "test", 1, "Fractions"), "teacher 2 generating for teacher 1's class")
+
+print("\nAI GENERATION TESTS PASSED")
+
+print("== library documents ==")
+ok(api.login("tmoyo", "secret1"), "admin login for documents")
+fail(api.upload_document("Notes", 1, "Grade 6"), "upload with no file dialog available (headless)")
+fail(api.upload_document("Notes", 1, "Not A Grade"), "invalid grade rejected")
+
+# seed a document directly (file upload needs a real dialog — mirrors the sim
+# library test's approach of inserting the row and letting the trigger index it)
+conn = db.connect()
+conn.execute(
+    "INSERT INTO documents (title, subject_id, grade, filename, original_name, extracted_text) "
+    "VALUES (?, ?, ?, ?, ?, ?)",
+    ("Grade 6 Maths Notes", 1, "Grade 6", "doc_test.pdf", "notes.pdf",
+     "Fractions are parts of a whole. Adding fractions with the same denominator "
+     "means adding the numerators and keeping the denominator."),
+)
+conn.commit(); conn.close()
+
+r = api.list_documents(); ok(r, "list documents"); assert len(r["documents"]) == 1
+doc_id = r["documents"][0]["id"]
+print("  ok: seeded document listed")
+
+from app import documents as documents_mod
+hits = documents_mod.search_documents("Grade 6", 1, "fractions")
+assert hits and "fraction" in hits[0].lower()
+print("  ok: FTS search finds a relevant excerpt")
+
+hits2 = documents_mod.search_documents("Grade 6", 1, "photosynthesis")
+assert hits2 == [], "unrelated topic should return no excerpts"
+print("  ok: FTS search returns nothing for an unrelated topic")
+
+hits3 = documents_mod.search_documents("Grade 7", 1, "fractions")
+assert hits3 == [], "wrong grade should not match even with matching keywords"
+print("  ok: FTS search respects grade scoping")
+
+ok(api.login("bncube", "secret1"), "teacher login for document delete check")
+fail(api.delete_document(doc_id), "teacher deleting document (admin-only)")
+ok(api.login("tmoyo", "secret1"), "admin re-login")
+ok(api.delete_document(doc_id), "admin deletes document")
+r = api.list_documents(); assert len(r["documents"]) == 0
+print("  ok: document removed")
+
+print("\nLIBRARY DOCUMENTS TESTS PASSED")
+
+print("== grade scoping ==")
+ok(api.login("bncube", "secret1"), "teacher login for grade")
+r = api.create_class("Grade 7 Green", "Grade 7"); ok(r, "create class with grade")
+fail(api.create_class("Bad grade class", "Not A Grade"), "invalid grade rejected")
+r = api.list_grades(); ok(r, "list grades"); assert "Form 4" in r["grades"]
+print("  ok: grade validated against the fixed list")
+
+print("\nALL EXTENDED TESTS PASSED")

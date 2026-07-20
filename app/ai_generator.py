@@ -16,13 +16,14 @@ entirely, n_gpu_layers is always 0. Config comes from the settings table
 (see ai_settings.py) rather than a .env file, since NhavaLearn has none.
 """
 import os
+import re
 import threading
 import logging
 import multiprocessing
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
-from . import db, ai_settings
+from . import db, ai_settings, documents
 from .ai_pagination import (
     generate_with_pagination,
     format_paginated_content,
@@ -230,7 +231,27 @@ def smart_generate(prompt: str, system_prompt: str, max_tokens: int) -> str:
 # CONTENT-TYPE GENERATION FUNCTIONS
 # ============================================================
 
-def generate_quiz(topic: str, num_questions: int, grade: str, quiz_type: str = "multiple_choice") -> Dict:
+def _reference_context(grade: str, subject_id, topic: str) -> str:
+    """Pulls matching excerpts from admin-uploaded library documents (FTS5
+    keyword search — see documents.py) and folds them into the prompt. Applies
+    uniformly to cloud and local generation since this runs before
+    smart_generate() is ever called. Empty string (not an error) when no
+    documents match — generation still proceeds on model knowledge alone."""
+    if not subject_id:
+        return ""
+    try:
+        excerpts = documents.search_documents(grade, subject_id, topic, limit=3)
+    except Exception:
+        return ""
+    if not excerpts:
+        return ""
+    return (
+        "\n\nReference material from the school's library (ground your answer "
+        "in this where relevant):\n" + "\n---\n".join(excerpts)
+    )
+
+
+def generate_quiz(topic: str, num_questions: int, grade: str, subject_id=None, quiz_type: str = "multiple_choice") -> Dict:
     system = "You are creating quiz questions for a Zimbabwean classroom."
     user = (
         f"Create {num_questions} {quiz_type} questions on: {topic}\nGrade: {grade}\n\n"
@@ -241,6 +262,7 @@ def generate_quiz(topic: str, num_questions: int, grade: str, quiz_type: str = "
         "Explanation: <short explanation>\n"
         "Question 2: ...\n"
         "(continue sequentially for all questions)"
+        + _reference_context(grade, subject_id, topic)
     )
     optimal_tokens = calculate_optimal_tokens(num_questions, "quiz")
     content, meta = generate_with_pagination(
@@ -251,7 +273,7 @@ def generate_quiz(topic: str, num_questions: int, grade: str, quiz_type: str = "
     return {"content": format_paginated_content(content, meta), "meta": meta}
 
 
-def generate_flashcards(topic: str, num_cards: int, grade: str) -> Dict:
+def generate_flashcards(topic: str, num_cards: int, grade: str, subject_id=None) -> Dict:
     system = "You are creating study flashcards for a Zimbabwean classroom."
     user = (
         f"Create {num_cards} flashcards on: {topic}\nGrade: {grade}\n\n"
@@ -259,6 +281,7 @@ def generate_flashcards(topic: str, num_cards: int, grade: str) -> Dict:
         "CARD 1\nFront: <question or term>\nBack: <answer or definition>\n"
         "CARD 2\n...\n"
         "(continue sequentially for all cards)"
+        + _reference_context(grade, subject_id, topic)
     )
     optimal_tokens = calculate_optimal_tokens(num_cards, "flashcards")
     content, meta = generate_with_pagination(
@@ -269,13 +292,59 @@ def generate_flashcards(topic: str, num_cards: int, grade: str) -> Dict:
     return {"content": format_paginated_content(content, meta), "meta": meta}
 
 
-def generate_lesson_draft(topic: str, grade: str, duration: str = "60 minutes") -> Dict:
+def generate_lesson_draft(topic: str, grade: str, subject_id=None, duration: str = "60 minutes") -> Dict:
     """Not paginated — a lesson plan is one document, not N discrete items."""
     system = "You are an experienced educator creating lesson plans for a Zimbabwean classroom."
     user = (
         f"Create a lesson plan for: {topic}\nGrade: {grade}, Duration: {duration}\n\n"
         "Include: 1. Learning Objectives 2. Materials Needed 3. Introduction "
         "4. Main Activity 5. Assessment 6. Conclusion 7. Homework"
+        + _reference_context(grade, subject_id, topic)
     )
     content = smart_generate(user, system, max_tokens=2000)
     return {"content": content, "meta": {"paginated": False}}
+
+
+# ============================================================
+# STRUCTURED PARSING (for creating real test_questions rows,
+# as opposed to ai_html_formatter's Quill-HTML output)
+# ============================================================
+
+def parse_quiz_to_questions(text: str) -> List[Dict]:
+    """Parses generate_quiz()'s raw 'Question N: / A)-D) / Answer: /
+    Explanation:' text into structured rows matching test_questions'
+    columns (kind/prompt/options_json/answer/explanation/marks). Used by
+    the Classes 'Generate with AI' -> Test flow; the old Quill HTML path
+    (ai_html_formatter.quiz_text_to_quill_html) is unrelated and unaffected."""
+    blocks = re.split(r'\n(?=Question\s+\d+:)', text.strip())
+    questions = []
+    option_re = re.compile(r'^([A-D])\)\s*(.+)$')
+    for block in blocks:
+        lines = [l.strip() for l in block.strip().split('\n') if l.strip()]
+        if not lines:
+            continue
+        m = re.match(r'Question\s+\d+:\s*(.+)', lines[0])
+        if not m:
+            continue
+        prompt = m.group(1).strip()
+        options, answer, explanation = [], "", ""
+        for line in lines[1:]:
+            opt = option_re.match(line)
+            if opt:
+                options.append(opt.group(2).strip())
+                continue
+            if line.lower().startswith("answer:"):
+                answer = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("explanation:"):
+                explanation = line.split(":", 1)[1].strip()
+        if not prompt:
+            continue
+        questions.append({
+            "kind": "multiple_choice",
+            "prompt": prompt,
+            "options": options,
+            "answer": answer,
+            "explanation": explanation,
+            "marks": 1,
+        })
+    return questions
