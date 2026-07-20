@@ -313,6 +313,12 @@ hits3 = documents_mod.search_documents("Grade 7", 1, "fractions")
 assert hits3 == [], "wrong grade should not match even with matching keywords"
 print("  ok: FTS search respects grade scoping")
 
+picked = documents_mod.get_documents_text([doc_id])
+assert picked and "Fractions are parts of a whole" in picked[0]
+print("  ok: explicit document selection returns full text regardless of topic keywords")
+assert documents_mod.get_documents_text([999999]) == [], "missing id returns nothing, not an error"
+print("  ok: explicit selection tolerates a stale/missing document id")
+
 ok(api.login("bncube", "secret1"), "teacher login for document delete check")
 fail(api.delete_document(doc_id), "teacher deleting document (admin-only)")
 ok(api.login("tmoyo", "secret1"), "admin re-login")
@@ -324,9 +330,21 @@ print("\nLIBRARY DOCUMENTS TESTS PASSED")
 
 print("== grade scoping ==")
 ok(api.login("bncube", "secret1"), "teacher login for grade")
-r = api.create_class("Grade 7 Green", "Grade 7"); ok(r, "create class with grade")
+r = api.create_class("Grade 7 Green", "Grade 7"); ok(r, "create class with grade"); c2 = r["id"]
 fail(api.create_class("Bad grade class", "Not A Grade"), "invalid grade rejected")
 r = api.list_grades(); ok(r, "list grades"); assert "Form 4" in r["grades"]
 print("  ok: grade validated against the fixed list")
+
+print("== editing an existing class's grade ==")
+# c1 was created earlier with no grade (predates this field) — confirm it can
+# be set retroactively, since that's the only way older classes pick up
+# grade-scoped document retrieval.
+r = api.list_lessons(c1); ok(r, "reload class c1"); assert r["class"]["grade"] is None
+ok(api.update_class(c1, "Grade 6 Blue", "Grade 6"), "set grade on existing class")
+r = api.list_lessons(c1); assert r["class"]["grade"] == "Grade 6", "grade persisted"
+print("  ok: existing class picked up a grade retroactively")
+fail(api.update_class(c1, "Grade 6 Blue", "Not A Grade"), "invalid grade rejected on edit")
+ok(api.login("sdube", "secret1"), "teacher 2 login")
+fail(api.update_class(c1, "Hijacked", "Grade 6"), "teacher 2 editing teacher 1's class")
 
 print("\nALL EXTENDED TESTS PASSED")

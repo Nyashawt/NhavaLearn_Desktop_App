@@ -276,7 +276,10 @@ routes.classes = async () => {
             <h3 style="font-size:16px">${esc(c.name)}</h3>
             <div class="meta">${isTeacher ? "" : esc(c.teacher_name) + " · "}${c.lesson_count} lesson${c.lesson_count === 1 ? "" : "s"}</div>
           </div>
-          <i class="bi bi-chevron-right" style="color:var(--muted)"></i>
+          <div style="display:flex;align-items:center;gap:10px">
+            ${isTeacher ? `<button class="btn sm danger class-del" data-id="${c.id}" title="Delete class"><i class="bi bi-trash"></i></button>` : ""}
+            <i class="bi bi-chevron-right" style="color:var(--muted)"></i>
+          </div>
         </div>`).join("")}</div>`
     : `<div class="card empty-state"><i class="bi bi-collection"></i>
         ${isTeacher ? "No classes yet. Create your first class to start adding lessons." : "No classes have been created on this device yet."}</div>`;
@@ -291,6 +294,14 @@ routes.classes = async () => {
 
   $app.querySelectorAll(".item-card[data-id]").forEach(el =>
     el.onclick = () => go("lessons", Number(el.dataset.id)));
+
+  $app.querySelectorAll(".class-del").forEach(b =>
+    b.onclick = async e => {
+      e.stopPropagation();
+      if (!confirm("Delete this class and all its lessons and tests?")) return;
+      const res = await api().delete_class(Number(b.dataset.id));
+      res.ok ? go("classes") : toast(res.error);
+    });
 
   const nb = document.getElementById("new-class");
   if (nb) nb.onclick = async () => {
@@ -374,8 +385,8 @@ routes.lessons = async (classId) => {
   frame("classes", `
     <div class="page-head">
       <div>
-        <h2>${esc(r.class.name)}</h2>
-        <div class="sub">${esc(r.class.teacher_name)} · ${r.lessons.length} lesson${r.lessons.length === 1 ? "" : "s"}
+        <h2>${esc(r.class.name)} ${isOwner ? `<a href="#" id="edit-class" title="Edit class" style="font-size:14px"><i class="bi bi-pencil"></i></a>` : ""}</h2>
+        <div class="sub">${esc(r.class.teacher_name)} · ${r.class.grade ? esc(r.class.grade) + " · " : ""}${r.lessons.length} lesson${r.lessons.length === 1 ? "" : "s"}
           &nbsp; <a href="#" id="back">‹ All classes</a></div>
       </div>
       ${isOwner ? `<div style="display:flex;gap:10px">
@@ -390,6 +401,34 @@ routes.lessons = async (classId) => {
     ${testRows}`);
 
   document.getElementById("back").onclick = e => { e.preventDefault(); go("classes"); };
+
+  const ec = document.getElementById("edit-class");
+  if (ec) ec.onclick = async e => {
+    e.preventDefault();
+    const g = await api().list_grades();
+    modal(`
+      <h3>Edit class</h3>
+      <label class="field">Class name <input id="m-name" value="${esc(r.class.name)}" autofocus></label>
+      <label class="field">Grade / Form
+        <select id="m-grade"><option value="">— none —</option>
+          ${g.ok ? g.grades.map(gr => `<option value="${esc(gr)}" ${gr === r.class.grade ? "selected" : ""}>${esc(gr)}</option>`).join("") : ""}
+        </select></label>
+      <div class="actions">
+        <button class="btn secondary" id="m-cancel">Cancel</button>
+        <button class="btn" id="m-ok">Save</button>
+      </div>`,
+      bd => {
+        bd.querySelector("#m-cancel").onclick = () => bd.remove();
+        bd.querySelector("#m-ok").onclick = async () => {
+          const res = await api().update_class(classId,
+            bd.querySelector("#m-name").value,
+            bd.querySelector("#m-grade").value || null);
+          if (!res.ok) return toast(res.error);
+          bd.remove();
+          go("lessons", classId);
+        };
+      });
+  };
 
   $app.querySelectorAll(".act-open").forEach(b =>
     b.onclick = () => go(isOwner ? "editor" : "viewer", Number(b.dataset.id), classId));
@@ -483,6 +522,10 @@ routes.lessons = async (classId) => {
         <select id="m-subj"><option value="">— none —</option>
           ${subs.subjects.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}
         </select></label>
+      <label class="field">Library documents <span style="font-weight:400;color:var(--muted)">(optional — filtered to this class's grade + the subject above)</span>
+        <div id="m-docs-list" style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;max-height:140px;overflow-y:auto">
+          <span style="color:var(--muted)">Pick a subject to see documents…</span>
+        </div></label>
       <label class="field">Topic <input id="m-topic" placeholder="e.g. Fractions — adding and subtracting" autofocus></label>
       <label class="field" id="m-count-field">Number of questions <input id="m-count" type="number" min="1" max="20" value="10"></label>
       <div class="actions">
@@ -495,17 +538,42 @@ routes.lessons = async (classId) => {
         const syncCount = () => countField.style.display = kindSel.value === "test" ? "" : "none";
         kindSel.onchange = syncCount;
         syncCount();
+
+        const docsList = bd.querySelector("#m-docs-list");
+        const subjSel = bd.querySelector("#m-subj");
+        const syncDocs = async () => {
+          if (!r.class.grade) {
+            docsList.innerHTML = `<i class="bi bi-exclamation-triangle"></i> This class has no Grade set — <a href="#" id="m-set-grade">set one</a> so library documents can be matched.`;
+            const link = docsList.querySelector("#m-set-grade");
+            if (link) link.onclick = e => { e.preventDefault(); bd.remove(); document.getElementById("edit-class").click(); };
+            return;
+          }
+          const subjectId = Number(subjSel.value) || null;
+          if (!subjectId) { docsList.innerHTML = `<span style="color:var(--muted)">Pick a subject to see documents…</span>`; return; }
+          const dr = await api().list_documents(r.class.grade, subjectId);
+          docsList.innerHTML = (dr.ok && dr.documents.length)
+            ? dr.documents.map(d => `
+                <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-weight:400">
+                  <input type="checkbox" class="m-doc-check" value="${d.id}"> ${esc(d.title)}
+                </label>`).join("")
+            : `<span style="color:var(--muted)">No documents uploaded yet for ${esc(r.class.grade)} · ${esc(subjSel.options[subjSel.selectedIndex].text)} — generation will use the AI's own knowledge only.</span>`;
+        };
+        subjSel.onchange = syncDocs;
+        syncDocs();
+
         bd.querySelector("#m-cancel").onclick = () => bd.remove();
         bd.querySelector("#m-ok").onclick = async () => {
           const topic = bd.querySelector("#m-topic").value.trim();
           if (!topic) return toast("Enter a topic.");
+          const docIds = Array.from(bd.querySelectorAll(".m-doc-check:checked")).map(c => Number(c.value));
           const okBtn = bd.querySelector("#m-ok");
           okBtn.disabled = true;
           okBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Generating…';
           const res = await api().ai_generate_and_create(
             classId, kindSel.value,
             Number(bd.querySelector("#m-subj").value) || null,
-            topic, Number(bd.querySelector("#m-count").value) || 10);
+            topic, Number(bd.querySelector("#m-count").value) || 10,
+            docIds.length ? docIds : null);
           okBtn.disabled = false;
           okBtn.innerHTML = "Generate";
           if (!res.ok) return toast(res.error);

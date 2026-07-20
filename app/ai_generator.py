@@ -231,16 +231,20 @@ def smart_generate(prompt: str, system_prompt: str, max_tokens: int) -> str:
 # CONTENT-TYPE GENERATION FUNCTIONS
 # ============================================================
 
-def _reference_context(grade: str, subject_id, topic: str) -> str:
-    """Pulls matching excerpts from admin-uploaded library documents (FTS5
-    keyword search — see documents.py) and folds them into the prompt. Applies
-    uniformly to cloud and local generation since this runs before
-    smart_generate() is ever called. Empty string (not an error) when no
-    documents match — generation still proceeds on model knowledge alone."""
-    if not subject_id:
-        return ""
+def _reference_context(grade: str, subject_id, topic: str, document_ids=None) -> str:
+    """Folds admin-uploaded library documents into the prompt. If the teacher
+    explicitly picked documents (document_ids), uses their full text —
+    otherwise falls back to automatic FTS5 keyword search against the topic.
+    Applies uniformly to cloud and local generation since this runs before
+    smart_generate() is ever called. Empty string (not an error) when nothing
+    is available — generation still proceeds on model knowledge alone."""
     try:
-        excerpts = documents.search_documents(grade, subject_id, topic, limit=3)
+        if document_ids:
+            excerpts = documents.get_documents_text(document_ids)
+        elif subject_id:
+            excerpts = documents.search_documents(grade, subject_id, topic, limit=3)
+        else:
+            excerpts = []
     except Exception:
         return ""
     if not excerpts:
@@ -251,7 +255,7 @@ def _reference_context(grade: str, subject_id, topic: str) -> str:
     )
 
 
-def generate_quiz(topic: str, num_questions: int, grade: str, subject_id=None, quiz_type: str = "multiple_choice") -> Dict:
+def generate_quiz(topic: str, num_questions: int, grade: str, subject_id=None, quiz_type: str = "multiple_choice", document_ids=None) -> Dict:
     system = "You are creating quiz questions for a Zimbabwean classroom."
     user = (
         f"Create {num_questions} {quiz_type} questions on: {topic}\nGrade: {grade}\n\n"
@@ -262,7 +266,7 @@ def generate_quiz(topic: str, num_questions: int, grade: str, subject_id=None, q
         "Explanation: <short explanation>\n"
         "Question 2: ...\n"
         "(continue sequentially for all questions)"
-        + _reference_context(grade, subject_id, topic)
+        + _reference_context(grade, subject_id, topic, document_ids)
     )
     optimal_tokens = calculate_optimal_tokens(num_questions, "quiz")
     content, meta = generate_with_pagination(
@@ -273,7 +277,7 @@ def generate_quiz(topic: str, num_questions: int, grade: str, subject_id=None, q
     return {"content": format_paginated_content(content, meta), "meta": meta}
 
 
-def generate_flashcards(topic: str, num_cards: int, grade: str, subject_id=None) -> Dict:
+def generate_flashcards(topic: str, num_cards: int, grade: str, subject_id=None, document_ids=None) -> Dict:
     system = "You are creating study flashcards for a Zimbabwean classroom."
     user = (
         f"Create {num_cards} flashcards on: {topic}\nGrade: {grade}\n\n"
@@ -281,7 +285,7 @@ def generate_flashcards(topic: str, num_cards: int, grade: str, subject_id=None)
         "CARD 1\nFront: <question or term>\nBack: <answer or definition>\n"
         "CARD 2\n...\n"
         "(continue sequentially for all cards)"
-        + _reference_context(grade, subject_id, topic)
+        + _reference_context(grade, subject_id, topic, document_ids)
     )
     optimal_tokens = calculate_optimal_tokens(num_cards, "flashcards")
     content, meta = generate_with_pagination(
@@ -292,14 +296,14 @@ def generate_flashcards(topic: str, num_cards: int, grade: str, subject_id=None)
     return {"content": format_paginated_content(content, meta), "meta": meta}
 
 
-def generate_lesson_draft(topic: str, grade: str, subject_id=None, duration: str = "60 minutes") -> Dict:
+def generate_lesson_draft(topic: str, grade: str, subject_id=None, duration: str = "60 minutes", document_ids=None) -> Dict:
     """Not paginated — a lesson plan is one document, not N discrete items."""
     system = "You are an experienced educator creating lesson plans for a Zimbabwean classroom."
     user = (
         f"Create a lesson plan for: {topic}\nGrade: {grade}, Duration: {duration}\n\n"
         "Include: 1. Learning Objectives 2. Materials Needed 3. Introduction "
         "4. Main Activity 5. Assessment 6. Conclusion 7. Homework"
-        + _reference_context(grade, subject_id, topic)
+        + _reference_context(grade, subject_id, topic, document_ids)
     )
     content = smart_generate(user, system, max_tokens=2000)
     return {"content": content, "meta": {"paginated": False}}

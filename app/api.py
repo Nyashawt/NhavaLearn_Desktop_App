@@ -298,6 +298,27 @@ class Api:
             return e
         return {"ok": True, "grades": db.GRADES}
 
+    def update_class(self, class_id, name, grade=None):
+        e = self._require("teacher")
+        if e:
+            return e
+        if not (name or "").strip():
+            return _err("Enter a class name.")
+        if grade and grade not in db.GRADES:
+            return _err("Choose a valid grade.")
+        conn = db.connect()
+        try:
+            if not self._owns_class(conn, class_id):
+                return _err("You can only edit your own classes.")
+            conn.execute(
+                "UPDATE classes SET name = ?, grade = ? WHERE id = ?",
+                (name.strip(), grade or None, class_id),
+            )
+            conn.commit()
+            return {"ok": True}
+        finally:
+            conn.close()
+
     def delete_class(self, class_id):
         e = self._require("teacher")
         if e:
@@ -511,10 +532,13 @@ class Api:
         from . import ai_generator
         return {"ok": True, **ai_generator.get_ai_status()}
 
-    def ai_generate_and_create(self, class_id, kind, subject_id, topic, count=10):
+    def ai_generate_and_create(self, class_id, kind, subject_id, topic, count=10, document_ids=None):
         """Generate a Lesson or a Test from the Classes screen and create the
         real record directly — replaces the old lesson-editor 'Generate with
-        AI' button, which only pasted HTML into whatever page was open."""
+        AI' button, which only pasted HTML into whatever page was open.
+        document_ids: documents the teacher explicitly picked (from the ones
+        assigned to this class's grade + the chosen subject) to ground
+        generation in, instead of relying on automatic keyword matching."""
         e = self._require("teacher")
         if e:
             return e
@@ -530,17 +554,20 @@ class Api:
         finally:
             conn.close()
         grade = cls["grade"] if cls else None
+        document_ids = [int(d) for d in document_ids] if document_ids else None
 
         from . import ai_generator, ai_html_formatter
         try:
             if kind == "lesson":
-                result = ai_generator.generate_lesson_draft(topic, grade, subject_id)
-                html_ = ai_html_formatter.lesson_plan_text_to_quill_html(result["content"])
+                result = ai_generator.generate_lesson_draft(topic, grade, subject_id, document_ids=document_ids)
+                if not (result["content"] or "").strip():
+                    return _err("AI generation did not return any content. Try a different topic.")
+                html_ = ai_html_formatter.unwrap(ai_html_formatter.lesson_plan_text_to_quill_html(result["content"]))
                 new_id = self._create_lesson_row(class_id, topic.strip(), subject_id)
                 self._set_page_content(new_id, html_)
                 return {"ok": True, "kind": "lesson", "id": new_id}
             else:
-                result = ai_generator.generate_quiz(topic, int(count), grade, subject_id)
+                result = ai_generator.generate_quiz(topic, int(count), grade, subject_id, document_ids=document_ids)
                 questions = ai_generator.parse_quiz_to_questions(result["content"])
                 if not questions:
                     return _err("AI generation did not return any usable questions. Try a different topic.")

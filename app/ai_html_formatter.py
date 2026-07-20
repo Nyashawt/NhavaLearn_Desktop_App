@@ -23,6 +23,22 @@ def _wrap(inner_html: str) -> str:
     return f'<div class="ql-editor">{inner_html}</div>'
 
 
+_WRAPPER_RE = re.compile(r'^<div class="ql-editor">(.*)</div>$', re.DOTALL)
+
+
+def unwrap(wrapped_html: str) -> str:
+    """Strips the <div class="ql-editor"> wrapper _wrap() adds. Needed when
+    storing generated content as a lesson_pages.content_html value: that
+    column holds bare inner HTML (Present/Preview add the ql-editor wrapper
+    themselves at render time — see app.js's lesson-content rendering), and
+    Quill's editor loads content_html via direct DOM injection into an
+    element that already has the ql-editor class — a second nested wrapper
+    is an unrecognized blot and gets silently dropped, leaving a blank
+    editor even though the content is saved correctly in the database."""
+    m = _WRAPPER_RE.match(wrapped_html)
+    return m.group(1) if m else wrapped_html
+
+
 def quiz_text_to_quill_html(text: str) -> str:
     """
     Input shape: 'Question 1: ...\\nA) ...\\nAnswer: ...\\nExplanation: ...'

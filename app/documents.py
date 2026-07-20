@@ -138,3 +138,23 @@ def search_documents(grade: str, subject_id: Optional[int], query: str, limit: i
         return []
     finally:
         conn.close()
+
+
+def get_documents_text(document_ids: List[int], max_chars: int = 6000) -> List[str]:
+    """Returns full (truncated) extracted_text for explicitly teacher-picked
+    documents, in the order given — used instead of search_documents() when
+    the teacher selects specific documents rather than relying on automatic
+    keyword matching against the topic."""
+    if not document_ids:
+        return []
+    conn = db.connect()
+    try:
+        placeholders = ",".join("?" * len(document_ids))
+        rows = conn.execute(
+            f"SELECT id, extracted_text FROM documents WHERE id IN ({placeholders})",
+            document_ids,
+        ).fetchall()
+        by_id = {r["id"]: r["extracted_text"] for r in rows}
+        return [by_id[i][:max_chars] for i in document_ids if by_id.get(i)]
+    finally:
+        conn.close()
