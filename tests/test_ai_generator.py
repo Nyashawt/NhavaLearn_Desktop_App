@@ -61,9 +61,11 @@ class TestSmartGenerateFallback(unittest.TestCase):
         self.assertEqual(result, "cloud output")
         mock_cloud.assert_called_once()
 
+    @patch("app.ai_generator.get_model_path")
     @patch("app.ai_generator.ai_settings.get_ai_settings")
-    def test_raises_ai_unavailable_when_nothing_configured(self, mock_settings):
+    def test_raises_ai_unavailable_when_nothing_configured(self, mock_settings, mock_model_path):
         mock_settings.return_value = {"provider": "cloud", "api_key": None, "model_filename": None, "cpu_threads": None}
+        mock_model_path.side_effect = FileNotFoundError("no model found")
 
         from app.ai_generator import smart_generate, AIUnavailable
         with self.assertRaises(AIUnavailable):

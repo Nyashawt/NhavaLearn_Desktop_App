@@ -232,7 +232,16 @@ def smart_generate(prompt: str, system_prompt: str, max_tokens: int) -> str:
 
 def generate_quiz(topic: str, num_questions: int, grade: str, quiz_type: str = "multiple_choice") -> Dict:
     system = "You are creating quiz questions for a Zimbabwean classroom."
-    user = f"Create {num_questions} {quiz_type} questions on: {topic}\nGrade: {grade}"
+    user = (
+        f"Create {num_questions} {quiz_type} questions on: {topic}\nGrade: {grade}\n\n"
+        "Format each question EXACTLY like this, with no other text:\n"
+        "Question 1: <question text>\n"
+        "A) <option>\nB) <option>\nC) <option>\nD) <option>\n"
+        "Answer: <letter>\n"
+        "Explanation: <short explanation>\n"
+        "Question 2: ...\n"
+        "(continue sequentially for all questions)"
+    )
     optimal_tokens = calculate_optimal_tokens(num_questions, "quiz")
     content, meta = generate_with_pagination(
         generate_function=lambda p, s, t: smart_generate(p, s, t),
@@ -244,7 +253,13 @@ def generate_quiz(topic: str, num_questions: int, grade: str, quiz_type: str = "
 
 def generate_flashcards(topic: str, num_cards: int, grade: str) -> Dict:
     system = "You are creating study flashcards for a Zimbabwean classroom."
-    user = f"Create {num_cards} flashcards on: {topic}\nGrade: {grade}"
+    user = (
+        f"Create {num_cards} flashcards on: {topic}\nGrade: {grade}\n\n"
+        "Format each flashcard EXACTLY like this, with no other text:\n"
+        "CARD 1\nFront: <question or term>\nBack: <answer or definition>\n"
+        "CARD 2\n...\n"
+        "(continue sequentially for all cards)"
+    )
     optimal_tokens = calculate_optimal_tokens(num_cards, "flashcards")
     content, meta = generate_with_pagination(
         generate_function=lambda p, s, t: smart_generate(p, s, t),
