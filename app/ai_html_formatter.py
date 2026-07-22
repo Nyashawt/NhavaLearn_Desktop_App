@@ -17,10 +17,44 @@ not a crash.
 """
 import re
 import html
+from typing import Dict, List
 
 
 def _wrap(inner_html: str) -> str:
     return f'<div class="ql-editor">{inner_html}</div>'
+
+
+def _clean_markdown_line(line: str) -> str:
+    """Models sometimes ignore the 'plain text only' prompt instruction and
+    slip in markdown anyway (# headers, - bullets, whole-line **bold**).
+    Strips the structural markers a line-oriented plain-text formatter can't
+    otherwise handle; _inline_bold() below converts any remaining **bold**
+    spans into real <strong> tags rather than leaving literal asterisks."""
+    line = line.strip()
+    # '#' has no legitimate use in this educational content, so strip it
+    # wherever it appears, not just at line-start (models sometimes emit
+    # '### ' mid-line after a prefix like 'Question 1: ### ...').
+    line = re.sub(r'#{1,6}\s*', '', line)
+    # bullet markers only at line-start — a leading '-' mid-sentence could be
+    # a legitimate dash, not a markdown list item.
+    line = re.sub(r'^[-*+]\s+', '', line)
+    line = re.sub(r'^\*\*(.+)\*\*$', r'\1', line)
+    return line.strip()
+
+
+def _inline_bold(escaped_line: str) -> str:
+    """Converts **text** to <strong>text</strong>. Runs on already-escaped
+    text — ** has no HTML significance so html.escape() leaves it untouched,
+    and the captured group was already escaped, so this is safe."""
+    return re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', escaped_line)
+
+
+def _clean_markdown_text(text: str) -> str:
+    """Applies _clean_markdown_line() to every line before any block-splitting
+    regex runs — a stray '### Question 1:' would otherwise never match a
+    splitter looking for a line that starts with 'Question', so cleaning has
+    to happen before structural parsing, not just before HTML escaping."""
+    return "\n".join(_clean_markdown_line(l) for l in text.strip().split("\n"))
 
 
 _WRAPPER_RE = re.compile(r'^<div class="ql-editor">(.*)</div>$', re.DOTALL)
@@ -46,10 +80,11 @@ def quiz_text_to_quill_html(text: str) -> str:
     paragraphs. One <p> per line — matches how Quill itself stores
     line breaks, so re-editing in the app looks native, not pasted.
     """
-    blocks = re.split(r'\n(?=Question\s+\d+:)', text.strip())
+    cleaned = _clean_markdown_text(text)
+    blocks = re.split(r'\n(?=Question\s+\d+:)', cleaned)
     parts = []
     for block in blocks:
-        lines = [html.escape(l) for l in block.strip().split('\n') if l.strip()]
+        lines = [_inline_bold(html.escape(l)) for l in block.strip().split('\n') if l.strip()]
         if not lines:
             continue
         parts.append(f"<p><strong>{lines[0]}</strong></p>")
@@ -64,16 +99,17 @@ def flashcards_text_to_quill_html(text: str) -> str:
     Rendered as a front/back pair per card, front bolded so it reads as
     a prompt when scanned quickly in the editor.
     """
-    cards = re.split(r'\n(?=CARD\s+\d+)', text.strip(), flags=re.IGNORECASE)
+    cleaned = _clean_markdown_text(text)
+    cards = re.split(r'\n(?=CARD\s+\d+)', cleaned, flags=re.IGNORECASE)
     parts = []
     for card in cards:
         front = re.search(r'Front:\s*(.+)', card, re.IGNORECASE)
         back = re.search(r'Back:\s*(.+)', card, re.IGNORECASE)
         if not front:
             continue
-        parts.append(f"<p><strong>{html.escape(front.group(1).strip())}</strong></p>")
+        parts.append(f"<p><strong>{_inline_bold(html.escape(front.group(1).strip()))}</strong></p>")
         if back:
-            parts.append(f"<p>{html.escape(back.group(1).strip())}</p>")
+            parts.append(f"<p>{_inline_bold(html.escape(back.group(1).strip()))}</p>")
     return _wrap("".join(parts))
 
 
@@ -85,15 +121,58 @@ def lesson_plan_text_to_quill_html(text: str) -> str:
     page, which is normally authored freehand in Quill, not structured
     like a document.
     """
-    section_re = re.compile(r'^\d+\.\s+[A-Z][A-Za-z ]+$')
+    section_re = re.compile(r'^\d+\.\s+[A-Za-z][A-Za-z ]+$')
     parts = []
-    for line in text.strip().split('\n'):
+    for line in _clean_markdown_text(text).split('\n'):
         line = line.strip()
         if not line:
             continue
-        escaped = html.escape(line)
+        escaped = _inline_bold(html.escape(line))
         if section_re.match(line):
             parts.append(f"<p><strong>{escaped}</strong></p>")
         else:
             parts.append(f"<p>{escaped}</p>")
     return _wrap("".join(parts))
+
+
+def lesson_plan_text_to_pages(text: str) -> List[Dict[str, str]]:
+    """Splits generate_lesson_draft()'s 7 numbered sections (Learning
+    Objectives, Materials Needed, Introduction, Main Activity, Assessment,
+    Conclusion, Homework — always in that order per the prompt) into 3
+    presentation-sized pages, matching how a teacher actually flips through
+    a lesson: intro material, then the main activity, then wrap-up. Falls
+    back to a single page if the model didn't follow the numbered format."""
+    section_re = re.compile(r'^\d+\.\s+(.+)$')
+    sections: List[tuple] = []
+    current = None
+    for line in _clean_markdown_text(text).split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        m = section_re.match(line)
+        if m:
+            current = (m.group(1).strip(), [])
+            sections.append(current)
+        elif current:
+            current[1].append(line)
+
+    if not sections:
+        return [{"title": "Lesson Plan", "content_html": unwrap(lesson_plan_text_to_quill_html(text))}]
+
+    groups = [
+        ("Introduction", sections[0:3]),
+        ("Main Activity", sections[3:4]),
+        ("Assessment & Wrap-up", sections[4:]),
+    ]
+
+    pages = []
+    for title, group_sections in groups:
+        if not group_sections:
+            continue
+        parts = []
+        for sec_title, body_lines in group_sections:
+            parts.append(f"<p><strong>{_inline_bold(html.escape(sec_title))}</strong></p>")
+            for bl in body_lines:
+                parts.append(f"<p>{_inline_bold(html.escape(bl))}</p>")
+        pages.append({"title": title, "content_html": "".join(parts)})
+    return pages

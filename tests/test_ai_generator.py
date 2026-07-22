@@ -14,7 +14,9 @@ from app.ai_html_formatter import (
     quiz_text_to_quill_html,
     flashcards_text_to_quill_html,
     lesson_plan_text_to_quill_html,
+    lesson_plan_text_to_pages,
 )
+from app.ai_generator import parse_quiz_to_questions
 
 
 class TestHtmlFormatters(unittest.TestCase):
@@ -41,6 +43,56 @@ class TestHtmlFormatters(unittest.TestCase):
         out = lesson_plan_text_to_quill_html(raw)
         self.assertIn("<strong>1. Learning Objectives</strong>", out)
         self.assertIn("<p>Students will understand X.</p>", out)
+
+    def test_strips_markdown_headers_and_bullets(self):
+        raw = "Question 1: ### What is 2+2?\n- A) 3\n- B) 4\nAnswer: B"
+        out = quiz_text_to_quill_html(raw)
+        self.assertNotIn("#", out)
+        self.assertNotIn("- A)", out)
+        self.assertIn("A) 3", out)
+
+    def test_converts_markdown_bold_to_strong_tag(self):
+        raw = "Question 1: What is **half** of 4?\nAnswer: 2"
+        out = quiz_text_to_quill_html(raw)
+        self.assertIn("<strong>half</strong>", out)
+        self.assertNotIn("**", out)
+
+    def test_lesson_plan_splits_into_three_pages(self):
+        raw = (
+            "1. Learning Objectives\nAdd fractions.\n"
+            "2. Materials Needed\nChalk.\n"
+            "3. Introduction\nRecap prior lesson.\n"
+            "4. Main Activity\nWork through examples.\n"
+            "5. Assessment\nQuick quiz.\n"
+            "6. Conclusion\nSummarise.\n"
+            "7. Homework\nExercise 3."
+        )
+        pages = lesson_plan_text_to_pages(raw)
+        self.assertEqual(len(pages), 3)
+        self.assertEqual(pages[0]["title"], "Introduction")
+        self.assertIn("Learning Objectives", pages[0]["content_html"])
+        self.assertIn("Introduction", pages[0]["content_html"])
+        self.assertEqual(pages[1]["title"], "Main Activity")
+        self.assertIn("Work through examples", pages[1]["content_html"])
+        self.assertEqual(pages[2]["title"], "Assessment & Wrap-up")
+        self.assertIn("Homework", pages[2]["content_html"])
+
+    def test_lesson_plan_pages_falls_back_when_unstructured(self):
+        pages = lesson_plan_text_to_pages("Just some free-form text with no numbered sections.")
+        self.assertEqual(len(pages), 1)
+        self.assertIn("free-form text", pages[0]["content_html"])
+
+
+class TestQuizParsing(unittest.TestCase):
+    def test_strips_markdown_from_structured_fields(self):
+        raw = "Question 1: ### What is **half** of 4?\nA) 1\nB) 2\nAnswer: **B**\nExplanation: ### Simple division."
+        questions = parse_quiz_to_questions(raw)
+        self.assertEqual(len(questions), 1)
+        q = questions[0]
+        self.assertNotIn("#", q["prompt"])
+        self.assertNotIn("**", q["prompt"])
+        self.assertEqual(q["answer"], "B")
+        self.assertNotIn("#", q["explanation"])
 
 
 class TestSmartGenerateFallback(unittest.TestCase):

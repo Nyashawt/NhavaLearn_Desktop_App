@@ -256,7 +256,8 @@ def _reference_context(grade: str, subject_id, topic: str, document_ids=None) ->
 
 
 def generate_quiz(topic: str, num_questions: int, grade: str, subject_id=None, quiz_type: str = "multiple_choice", document_ids=None) -> Dict:
-    system = "You are creating quiz questions for a Zimbabwean classroom."
+    system = ("You are creating quiz questions for a Zimbabwean classroom. "
+               "Plain text only — no markdown formatting (no #, no **, no bullet dashes).")
     user = (
         f"Create {num_questions} {quiz_type} questions on: {topic}\nGrade: {grade}\n\n"
         "Format each question EXACTLY like this, with no other text:\n"
@@ -278,7 +279,8 @@ def generate_quiz(topic: str, num_questions: int, grade: str, subject_id=None, q
 
 
 def generate_flashcards(topic: str, num_cards: int, grade: str, subject_id=None, document_ids=None) -> Dict:
-    system = "You are creating study flashcards for a Zimbabwean classroom."
+    system = ("You are creating study flashcards for a Zimbabwean classroom. "
+               "Plain text only — no markdown formatting (no #, no **, no bullet dashes).")
     user = (
         f"Create {num_cards} flashcards on: {topic}\nGrade: {grade}\n\n"
         "Format each flashcard EXACTLY like this, with no other text:\n"
@@ -298,10 +300,13 @@ def generate_flashcards(topic: str, num_cards: int, grade: str, subject_id=None,
 
 def generate_lesson_draft(topic: str, grade: str, subject_id=None, duration: str = "60 minutes", document_ids=None) -> Dict:
     """Not paginated — a lesson plan is one document, not N discrete items."""
-    system = "You are an experienced educator creating lesson plans for a Zimbabwean classroom."
+    system = ("You are an experienced educator creating lesson plans for a Zimbabwean classroom. "
+               "Plain text only — no markdown formatting (no #, no **, no bullet dashes).")
     user = (
         f"Create a lesson plan for: {topic}\nGrade: {grade}, Duration: {duration}\n\n"
-        "Include: 1. Learning Objectives 2. Materials Needed 3. Introduction "
+        "Number each section exactly like '1. Learning Objectives' on its own line "
+        "(plain text, not a markdown heading), in this exact order: "
+        "1. Learning Objectives 2. Materials Needed 3. Introduction "
         "4. Main Activity 5. Assessment 6. Conclusion 7. Homework"
         + _reference_context(grade, subject_id, topic, document_ids)
     )
@@ -314,13 +319,24 @@ def generate_lesson_draft(topic: str, grade: str, subject_id=None, duration: str
 # as opposed to ai_html_formatter's Quill-HTML output)
 # ============================================================
 
+def _strip_markdown(s: str) -> str:
+    """test_questions fields are stored and rendered as plain text (see
+    ai_pagination's esc() at present time) — models occasionally add markdown
+    anyway (# headers, **bold**), which would otherwise show up as literal
+    stray characters rather than being interpreted."""
+    s = re.sub(r'#{1,6}\s*', '', s.strip())
+    s = s.replace('**', '')
+    return s.strip()
+
+
 def parse_quiz_to_questions(text: str) -> List[Dict]:
     """Parses generate_quiz()'s raw 'Question N: / A)-D) / Answer: /
     Explanation:' text into structured rows matching test_questions'
     columns (kind/prompt/options_json/answer/explanation/marks). Used by
     the Classes 'Generate with AI' -> Test flow; the old Quill HTML path
     (ai_html_formatter.quiz_text_to_quill_html) is unrelated and unaffected."""
-    blocks = re.split(r'\n(?=Question\s+\d+:)', text.strip())
+    cleaned_lines = [_strip_markdown(l) for l in text.strip().split('\n')]
+    blocks = re.split(r'\n(?=Question\s+\d+:)', "\n".join(cleaned_lines))
     questions = []
     option_re = re.compile(r'^([A-D])\)\s*(.+)$')
     for block in blocks:

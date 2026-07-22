@@ -562,9 +562,8 @@ class Api:
                 result = ai_generator.generate_lesson_draft(topic, grade, subject_id, document_ids=document_ids)
                 if not (result["content"] or "").strip():
                     return _err("AI generation did not return any content. Try a different topic.")
-                html_ = ai_html_formatter.unwrap(ai_html_formatter.lesson_plan_text_to_quill_html(result["content"]))
-                new_id = self._create_lesson_row(class_id, topic.strip(), subject_id)
-                self._set_page_content(new_id, html_)
+                pages = ai_html_formatter.lesson_plan_text_to_pages(result["content"])
+                new_id = self._create_lesson_with_pages(class_id, topic.strip(), subject_id, pages)
                 return {"ok": True, "kind": "lesson", "id": new_id}
             else:
                 result = ai_generator.generate_quiz(topic, int(count), grade, subject_id, document_ids=document_ids)
@@ -576,7 +575,10 @@ class Api:
         except ai_generator.AIUnavailable as ex:
             return _err(str(ex))
 
-    def _create_lesson_row(self, class_id, title, subject_id):
+    def _create_lesson_with_pages(self, class_id, title, subject_id, pages):
+        """pages: list of {"title", "content_html"} — one lesson_pages row per
+        entry, in order. Falls back to a single blank page if generation
+        produced none, so a lesson is never left with zero pages."""
         conn = db.connect()
         try:
             cur = conn.execute(
@@ -584,23 +586,13 @@ class Api:
                 (class_id, subject_id or None, self._current_user["id"], title),
             )
             lesson_id = cur.lastrowid
-            conn.execute(
-                "INSERT INTO lesson_pages (lesson_id, page_number, title) VALUES (?, 1, 'Page 1')",
-                (lesson_id,),
-            )
+            for i, p in enumerate(pages or [{"title": "Page 1", "content_html": ""}], start=1):
+                conn.execute(
+                    "INSERT INTO lesson_pages (lesson_id, page_number, title, content_html) VALUES (?, ?, ?, ?)",
+                    (lesson_id, i, p["title"], p["content_html"]),
+                )
             conn.commit()
             return lesson_id
-        finally:
-            conn.close()
-
-    def _set_page_content(self, lesson_id, content_html):
-        conn = db.connect()
-        try:
-            conn.execute(
-                "UPDATE lesson_pages SET content_html = ? WHERE lesson_id = ? AND page_number = 1",
-                (content_html, lesson_id),
-            )
-            conn.commit()
         finally:
             conn.close()
 
