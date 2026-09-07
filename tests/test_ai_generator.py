@@ -57,7 +57,7 @@ class TestHtmlFormatters(unittest.TestCase):
         self.assertIn("<strong>half</strong>", out)
         self.assertNotIn("**", out)
 
-    def test_lesson_plan_splits_into_three_pages(self):
+    def test_lesson_plan_keeps_only_main_activity_and_homework(self):
         raw = (
             "1. Learning Objectives\nAdd fractions.\n"
             "2. Materials Needed\nChalk.\n"
@@ -68,14 +68,14 @@ class TestHtmlFormatters(unittest.TestCase):
             "7. Homework\nExercise 3."
         )
         pages = lesson_plan_text_to_pages(raw)
-        self.assertEqual(len(pages), 3)
-        self.assertEqual(pages[0]["title"], "Introduction")
-        self.assertIn("Learning Objectives", pages[0]["content_html"])
-        self.assertIn("Introduction", pages[0]["content_html"])
-        self.assertEqual(pages[1]["title"], "Main Activity")
-        self.assertIn("Work through examples", pages[1]["content_html"])
-        self.assertEqual(pages[2]["title"], "Assessment & Wrap-up")
-        self.assertIn("Homework", pages[2]["content_html"])
+        self.assertEqual(len(pages), 2)
+        self.assertEqual(pages[0]["title"], "Main Activity")
+        self.assertIn("Work through examples", pages[0]["content_html"])
+        self.assertNotIn("Learning Objectives", pages[0]["content_html"])
+        self.assertEqual(pages[1]["title"], "Homework")
+        self.assertIn("Exercise 3", pages[1]["content_html"])
+        self.assertNotIn("Assessment", pages[1]["content_html"])
+        self.assertNotIn("Chalk", pages[0]["content_html"] + pages[1]["content_html"])
 
     def test_lesson_plan_pages_falls_back_when_unstructured(self):
         pages = lesson_plan_text_to_pages("Just some free-form text with no numbered sections.")

@@ -138,10 +138,13 @@ def lesson_plan_text_to_quill_html(text: str) -> str:
 def lesson_plan_text_to_pages(text: str) -> List[Dict[str, str]]:
     """Splits generate_lesson_draft()'s 7 numbered sections (Learning
     Objectives, Materials Needed, Introduction, Main Activity, Assessment,
-    Conclusion, Homework — always in that order per the prompt) into 3
-    presentation-sized pages, matching how a teacher actually flips through
-    a lesson: intro material, then the main activity, then wrap-up. Falls
-    back to a single page if the model didn't follow the numbered format."""
+    Conclusion, Homework — always in that order per the prompt) into the
+    pages that actually get presented to the class. These lesson_pages rows
+    are the student-facing view (there's no separate teacher-only copy), so
+    planning sections meant for the teacher (Objectives, Materials,
+    Introduction, Assessment, Conclusion) are deliberately dropped here —
+    only Main Activity and Homework carry forward as pages. Falls back to a
+    single page if the model didn't follow the numbered format."""
     section_re = re.compile(r'^\d+\.\s+(.+)$')
     sections: List[tuple] = []
     current = None
@@ -159,14 +162,20 @@ def lesson_plan_text_to_pages(text: str) -> List[Dict[str, str]]:
     if not sections:
         return [{"title": "Lesson Plan", "content_html": unwrap(lesson_plan_text_to_quill_html(text))}]
 
+    def _find(keyword):
+        for sec_title, body_lines in sections:
+            if keyword in sec_title.lower():
+                return (sec_title, body_lines)
+        return None
+
     groups = [
-        ("Introduction", sections[0:3]),
-        ("Main Activity", sections[3:4]),
-        ("Assessment & Wrap-up", sections[4:]),
+        ("Main Activity", [_find("main activity")]),
+        ("Homework", [_find("homework")]),
     ]
 
     pages = []
     for title, group_sections in groups:
+        group_sections = [s for s in group_sections if s]
         if not group_sections:
             continue
         parts = []
@@ -175,4 +184,7 @@ def lesson_plan_text_to_pages(text: str) -> List[Dict[str, str]]:
             for bl in body_lines:
                 parts.append(f"<p>{_inline_bold(html.escape(bl))}</p>")
         pages.append({"title": title, "content_html": "".join(parts)})
+
+    if not pages:
+        return [{"title": "Lesson Plan", "content_html": unwrap(lesson_plan_text_to_quill_html(text))}]
     return pages
