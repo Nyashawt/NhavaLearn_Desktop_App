@@ -13,12 +13,7 @@ import webview
 
 from app.api import Api
 from app import db
-
-
-def resource_path(relative: str) -> str:
-    """Resolve bundled resources both in dev and when frozen by PyInstaller."""
-    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base, relative)
+from app.paths import resource_path
 
 
 def main():

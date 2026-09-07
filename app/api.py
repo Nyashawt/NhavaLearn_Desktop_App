@@ -20,6 +20,7 @@ import time
 import webview
 
 from . import auth, db, media_server
+from .paths import resource_path
 
 
 def _err(msg: str) -> dict:
@@ -1323,7 +1324,7 @@ class Api:
         target = screens[1] if len(screens) > 1 else screens[0]
         self._present_window = webview.create_window(
             title="NhavaLearn — Presentation",
-            url="ui/present.html",
+            url=resource_path(os.path.join("ui", "present.html")),
             screen=target,
             fullscreen=True,
             js_api=self,

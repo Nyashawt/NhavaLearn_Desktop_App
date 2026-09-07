@@ -15,3 +15,7 @@ desktop.ini
 
 # runtime bundles / packaged builds
 *.zip
+
+# PyInstaller build output (produced by build.bat / NhavaLearn.spec)
+build/
+dist/
