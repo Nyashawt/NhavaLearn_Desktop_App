@@ -120,6 +120,7 @@ routes.setup = () => {
   $app.innerHTML = `
   <div class="split-screen">
     <div class="split-hero">
+      <img src="Nhava Learn logo.png" alt="NhavaLearn" class="hero-logo">
       <div class="big">Welcome to <span class="gold">NhavaLearn</span></div>
       <p>Set up this device for your school. This only happens once — after setup, teachers sign in and start creating lessons.</p>
       <p><i class="bi bi-sun"></i> Works fully offline, powered by your SmartClass kit.</p>
@@ -164,6 +165,7 @@ routes.login = async () => {
   $app.innerHTML = `
   <div class="split-screen">
     <div class="split-hero">
+      <img src="Nhava Learn logo.png" alt="NhavaLearn" class="hero-logo">
       <div class="big">${esc(school) || "NhavaLearn"}</div>
       <p>Create, manage and present lessons — <span style="color:var(--gold);font-weight:700">no internet needed</span>.</p>
     </div>
@@ -207,7 +209,7 @@ function frame(active, contentHtml) {
   $app.innerHTML = `
   <div class="frame">
     <aside class="sidebar">
-      <div class="brand"><i class="bi bi-easel2"></i> NhavaLearn</div>
+      <div class="brand"><img src="Nhava Learn logo.png" alt="NhavaLearn"> NhavaLearn</div>
       <nav>
         ${links.map(([r, ic, lbl]) =>
           `<a href="#" data-route="${r}" class="${r === active ? "active" : ""}"><i class="bi ${ic}"></i> ${lbl}</a>`).join("")}

@@ -13,8 +13,8 @@
    Navigation works three ways: teacher's control bar on the laptop,
    arrow keys, and on-screen touch arrows (the OwayBoard is touch-enabled). */
 :root {
-  --blue: #2563EB; --purple: #7C3AED; --cyan: #06B6D4;
-  --gold: #FDE68A; --navy: #0F172A;
+  --amber: #E8712C; --amber-dark: #C85A1F; --amber-light: #F5AC4D;
+  --gold: #F5AC4D; --navy: #2D3F54;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -25,7 +25,7 @@ body {
 }
 body.idle, body.idle * { cursor: none !important; }
 header {
-  background: linear-gradient(135deg, var(--blue), var(--purple), var(--cyan));
+  background: linear-gradient(135deg, var(--navy) 0%, var(--amber) 60%, var(--amber-light) 100%);
   color: #fff; padding: 20px 110px 20px 48px; /* right space reserved for the exit button */
   display: flex; justify-content: space-between; align-items: baseline;
 }
@@ -51,13 +51,13 @@ div#content.ql-editor {
   position: fixed; top: 50%; transform: translateY(-50%);
   width: 74px; height: 74px; border-radius: 50%;
   border: none; cursor: pointer; z-index: 10;
-  background: rgba(15, 23, 42, .35); color: #fff; font-size: 30px;
+  background: rgba(45, 63, 84, .35); color: #fff; font-size: 30px;
   display: grid; place-items: center;
   opacity: 0; transition: opacity .25s ease;
 }
 .nav-arrow:disabled { opacity: 0 !important; pointer-events: none; }
 body:not(.idle) .nav-arrow { opacity: .85; }
-.nav-arrow:hover { background: rgba(15, 23, 42, .6); }
+.nav-arrow:hover { background: rgba(45, 63, 84, .6); }
 #nav-prev { left: 22px; }
 #nav-next { right: 22px; }
 #nav-exit {
