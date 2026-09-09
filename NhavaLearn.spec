@@ -20,6 +20,14 @@ binaries += collect_dynamic_libs("llama_cpp")
 datas = []
 datas += [("ui", "ui")]
 datas += collect_data_files("llama_cpp")
+# pywebview reads its own JS injection templates (webview/js/*.js) straight
+# off disk relative to its __file__ at runtime (see webview/util.py's
+# get_js_dir()) rather than importing them as Python code. PyInstaller only
+# bundles pure-.py modules into the PYZ archive by default, so without this
+# the "js" folder never lands next to the frozen module and pywebview fails
+# to inject the JS API bridge — window.pywebview never fires "pywebviewready"
+# and the UI hangs forever on the boot screen, with no visible error.
+datas += collect_data_files("webview")
 
 hiddenimports = [
     "webview.platforms.winforms",

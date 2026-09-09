@@ -107,11 +107,20 @@ function fixVideoSrcs(rootEl) {
 /* ============================ boot sequence ============================ */
 
 window.addEventListener("pywebviewready", async () => {
-  const mb = await api().get_media_base();
-  MEDIA_BASE = mb.base;
-  const state = await api().get_app_state();
-  if (!state.setup_complete) go("setup");
-  else go("login");
+  try {
+    const mb = await api().get_media_base();
+    MEDIA_BASE = mb.base;
+    const state = await api().get_app_state();
+    if (!state.setup_complete) go("setup");
+    else go("login");
+  } catch (e) {
+    const boot = document.querySelector(".boot-screen");
+    if (boot) {
+      boot.innerHTML = `<div class="boot-logo"><i class="bi bi-exclamation-triangle"></i></div>
+        <p>Startup failed: ${esc(e && e.message || String(e))}</p>`;
+    }
+    console.error("Boot failed:", e);
+  }
 });
 
 /* ============================ setup wizard ============================= */
