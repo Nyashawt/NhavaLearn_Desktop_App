@@ -19,3 +19,6 @@ desktop.ini
 # PyInstaller build output (produced by build.bat / NhavaLearn.spec)
 build/
 dist/
+
+# Inno Setup installer output (produced by NhavaLearn.iss)
+installer/
