@@ -138,13 +138,17 @@ def lesson_plan_text_to_quill_html(text: str) -> str:
 def lesson_plan_text_to_pages(text: str) -> List[Dict[str, str]]:
     """Splits generate_lesson_draft()'s 7 numbered sections (Learning
     Objectives, Materials Needed, Introduction, Main Activity, Assessment,
-    Conclusion, Homework — always in that order per the prompt) into the
-    pages that actually get presented to the class. These lesson_pages rows
-    are the student-facing view (there's no separate teacher-only copy), so
-    planning sections meant for the teacher (Objectives, Materials,
-    Introduction, Assessment, Conclusion) are deliberately dropped here —
-    only Main Activity and Homework carry forward as pages. Falls back to a
-    single page if the model didn't follow the numbered format."""
+    Conclusion, Homework — always in that order per the prompt) into
+    presentation-sized pages, matching how a teacher actually flips through
+    a lesson: intro/planning material, then the main activity, assessment
+    and wrap-up, then homework. The full plan is always kept — nothing is
+    dropped, so the complete lesson plan can still be reviewed or shared
+    with other staff — but each page is tagged 'presentable': only Main
+    Activity and Homework (what students are meant to see) are marked
+    presentable, so presenting the lesson to a class shows just those two
+    while the editor/viewer still show the whole plan. Falls back to a
+    single (presentable) page if the model didn't follow the numbered
+    format."""
     section_re = re.compile(r'^\d+\.\s+(.+)$')
     sections: List[tuple] = []
     current = None
@@ -160,21 +164,41 @@ def lesson_plan_text_to_pages(text: str) -> List[Dict[str, str]]:
             current[1].append(line)
 
     if not sections:
-        return [{"title": "Lesson Plan", "content_html": unwrap(lesson_plan_text_to_quill_html(text))}]
+        return [{"title": "Lesson Plan", "content_html": unwrap(lesson_plan_text_to_quill_html(text)),
+                 "presentable": True}]
 
-    def _find(keyword):
-        for sec_title, body_lines in sections:
+    def _find_index(keyword):
+        for i, (sec_title, _body_lines) in enumerate(sections):
             if keyword in sec_title.lower():
-                return (sec_title, body_lines)
+                return i
         return None
 
+    main_i = _find_index("main activity")
+    homework_i = _find_index("homework")
+    used_indices = {i for i in (main_i, homework_i) if i is not None}
+    main_activity = sections[main_i] if main_i is not None else None
+    homework = sections[homework_i] if homework_i is not None else None
+    # Everything before Main Activity is planning/intro material; everything
+    # after (besides Homework, pulled out separately above) is assessment/
+    # wrap-up — matches the section order the generation prompt always uses.
+    intro_sections, wrapup_sections = [], []
+    for i, s in enumerate(sections):
+        if i in used_indices:
+            continue
+        if main_i is not None and i < main_i:
+            intro_sections.append(s)
+        else:
+            wrapup_sections.append(s)
+
     groups = [
-        ("Main Activity", [_find("main activity")]),
-        ("Homework", [_find("homework")]),
+        ("Introduction", intro_sections, False),
+        ("Main Activity", [main_activity] if main_activity else [], True),
+        ("Assessment & Conclusion", wrapup_sections, False),
+        ("Homework", [homework] if homework else [], True),
     ]
 
     pages = []
-    for title, group_sections in groups:
+    for title, group_sections, presentable in groups:
         group_sections = [s for s in group_sections if s]
         if not group_sections:
             continue
@@ -183,8 +207,9 @@ def lesson_plan_text_to_pages(text: str) -> List[Dict[str, str]]:
             parts.append(f"<p><strong>{_inline_bold(html.escape(sec_title))}</strong></p>")
             for bl in body_lines:
                 parts.append(f"<p>{_inline_bold(html.escape(bl))}</p>")
-        pages.append({"title": title, "content_html": "".join(parts)})
+        pages.append({"title": title, "content_html": "".join(parts), "presentable": presentable})
 
     if not pages:
-        return [{"title": "Lesson Plan", "content_html": unwrap(lesson_plan_text_to_quill_html(text))}]
+        return [{"title": "Lesson Plan", "content_html": unwrap(lesson_plan_text_to_quill_html(text)),
+                 "presentable": True}]
     return pages

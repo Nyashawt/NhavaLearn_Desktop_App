@@ -577,9 +577,13 @@ class Api:
             return _err(str(ex))
 
     def _create_lesson_with_pages(self, class_id, title, subject_id, pages):
-        """pages: list of {"title", "content_html"} — one lesson_pages row per
-        entry, in order. Falls back to a single blank page if generation
-        produced none, so a lesson is never left with zero pages."""
+        """pages: list of {"title", "content_html", "presentable"?} — one
+        lesson_pages row per entry, in order. "presentable" (default True)
+        marks whether a page is shown when presenting to the class; the full
+        set of pages is always kept so the complete lesson plan stays
+        available in the editor/viewer for review or sharing with other
+        staff. Falls back to a single blank page if generation produced
+        none, so a lesson is never left with zero pages."""
         conn = db.connect()
         try:
             cur = conn.execute(
@@ -589,8 +593,9 @@ class Api:
             lesson_id = cur.lastrowid
             for i, p in enumerate(pages or [{"title": "Page 1", "content_html": ""}], start=1):
                 conn.execute(
-                    "INSERT INTO lesson_pages (lesson_id, page_number, title, content_html) VALUES (?, ?, ?, ?)",
-                    (lesson_id, i, p["title"], p["content_html"]),
+                    "INSERT INTO lesson_pages (lesson_id, page_number, title, content_html, presentable) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (lesson_id, i, p["title"], p["content_html"], 1 if p.get("presentable", True) else 0),
                 )
             conn.commit()
             return lesson_id
@@ -1312,7 +1317,14 @@ class Api:
         result = self.get_lesson(lesson_id)
         if not result["ok"]:
             return result
-        return self._open_presentation(result["pages"])
+        # The full lesson plan (objectives, materials, assessment, etc.) stays
+        # in lesson_pages for the editor/viewer, but only pages marked
+        # presentable (Main Activity, Homework) are what the class sees when
+        # presenting. Falls back to the full set if none are flagged, so a
+        # hand-authored lesson (which defaults every page to presentable)
+        # or an older lesson predating this flag still presents normally.
+        pages = [p for p in result["pages"] if p.get("presentable", 1)] or result["pages"]
+        return self._open_presentation(pages)
 
     def _open_presentation(self, pages):
         """Shared by lesson and test presenting: same window, same controls."""

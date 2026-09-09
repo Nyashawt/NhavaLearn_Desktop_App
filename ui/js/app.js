@@ -701,6 +701,7 @@ routes.editor = async (lessonId, classId) => {
       <div class="page-item ${i === current ? "active" : ""}" data-i="${i}" draggable="true"
            title="Click to open · drag to reorder">
         <span class="n">${i + 1}</span>${p.page_type === "simulation" ? ' <i class="bi bi-joystick"></i>' : ""} <span>${esc(p.title) || "Untitled"}</span>
+        ${Number(p.presentable) ? "" : `<i class="bi bi-eye-slash" style="margin-left:auto;color:var(--muted)" title="Planning page — not shown when presenting"></i>`}
       </div>`).join("");
     document.querySelectorAll(".page-item").forEach(el => {
       const i = Number(el.dataset.i);

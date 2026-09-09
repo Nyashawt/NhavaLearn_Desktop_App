@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS lesson_pages (
     title        TEXT NOT NULL DEFAULT '',
     page_type    TEXT NOT NULL DEFAULT 'content' CHECK (page_type IN ('content', 'simulation')),
     content_html TEXT NOT NULL DEFAULT '',
-    sim_path     TEXT
+    sim_path     TEXT,
+    presentable  INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS media (
@@ -176,6 +177,7 @@ MIGRATIONS = [
     "ALTER TABLE settings ADD COLUMN ai_api_key TEXT",
     "ALTER TABLE settings ADD COLUMN ai_model_filename TEXT",
     "ALTER TABLE classes ADD COLUMN grade TEXT",
+    "ALTER TABLE lesson_pages ADD COLUMN presentable INTEGER NOT NULL DEFAULT 1",
 ]
 
 

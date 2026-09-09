@@ -57,7 +57,7 @@ class TestHtmlFormatters(unittest.TestCase):
         self.assertIn("<strong>half</strong>", out)
         self.assertNotIn("**", out)
 
-    def test_lesson_plan_keeps_only_main_activity_and_homework(self):
+    def test_lesson_plan_keeps_full_plan_but_flags_student_facing_pages(self):
         raw = (
             "1. Learning Objectives\nAdd fractions.\n"
             "2. Materials Needed\nChalk.\n"
@@ -68,19 +68,41 @@ class TestHtmlFormatters(unittest.TestCase):
             "7. Homework\nExercise 3."
         )
         pages = lesson_plan_text_to_pages(raw)
-        self.assertEqual(len(pages), 2)
-        self.assertEqual(pages[0]["title"], "Main Activity")
-        self.assertIn("Work through examples", pages[0]["content_html"])
-        self.assertNotIn("Learning Objectives", pages[0]["content_html"])
-        self.assertEqual(pages[1]["title"], "Homework")
-        self.assertIn("Exercise 3", pages[1]["content_html"])
-        self.assertNotIn("Assessment", pages[1]["content_html"])
-        self.assertNotIn("Chalk", pages[0]["content_html"] + pages[1]["content_html"])
+        by_title = {p["title"]: p for p in pages}
+
+        # Nothing from the generated plan is dropped — the complete lesson
+        # plan is still there for the editor/viewer and for sharing with
+        # other staff.
+        self.assertEqual(len(pages), 4)
+        self.assertIn("Learning Objectives", by_title["Introduction"]["content_html"])
+        self.assertIn("Chalk", by_title["Introduction"]["content_html"])
+        self.assertIn("Recap prior lesson", by_title["Introduction"]["content_html"])
+        self.assertIn("Quick quiz", by_title["Assessment & Conclusion"]["content_html"])
+        self.assertIn("Summarise", by_title["Assessment & Conclusion"]["content_html"])
+        self.assertIn("Work through examples", by_title["Main Activity"]["content_html"])
+        self.assertIn("Exercise 3", by_title["Homework"]["content_html"])
+
+        # No section leaks into a group it doesn't belong to.
+        self.assertNotIn("Work through examples", by_title["Introduction"]["content_html"])
+        self.assertNotIn("Work through examples", by_title["Assessment & Conclusion"]["content_html"])
+        self.assertNotIn("Exercise 3", by_title["Introduction"]["content_html"])
+        self.assertNotIn("Exercise 3", by_title["Assessment & Conclusion"]["content_html"])
+        self.assertNotIn("Exercise 3", by_title["Main Activity"]["content_html"])
+        self.assertNotIn("Quick quiz", by_title["Main Activity"]["content_html"])
+        self.assertNotIn("Quick quiz", by_title["Homework"]["content_html"])
+
+        # Only Main Activity and Homework are what gets shown to the class
+        # when presenting.
+        self.assertFalse(by_title["Introduction"]["presentable"])
+        self.assertFalse(by_title["Assessment & Conclusion"]["presentable"])
+        self.assertTrue(by_title["Main Activity"]["presentable"])
+        self.assertTrue(by_title["Homework"]["presentable"])
 
     def test_lesson_plan_pages_falls_back_when_unstructured(self):
         pages = lesson_plan_text_to_pages("Just some free-form text with no numbered sections.")
         self.assertEqual(len(pages), 1)
         self.assertIn("free-form text", pages[0]["content_html"])
+        self.assertTrue(pages[0]["presentable"])
 
 
 class TestQuizParsing(unittest.TestCase):
