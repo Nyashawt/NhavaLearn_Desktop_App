@@ -195,7 +195,13 @@ def get_ai_status() -> Dict:
         "local_model_loaded": _model is not None,
         "local_model_available": local_ready,
         "local_model_info": _model_info if _model is not None else None,
+        "model_download": _download_status(),
     }
+
+
+def _download_status() -> Dict:
+    from . import model_downloader  # lazy: model_downloader imports this module
+    return model_downloader.get_status()
 
 
 # ============================================================
@@ -220,6 +226,13 @@ def smart_generate(prompt: str, system_prompt: str, max_tokens: int) -> str:
         logger.info("Using local generation")
         return _generate_with_local(prompt, system_prompt, max_tokens)
     except (FileNotFoundError, ImportError) as e:
+        dl = _download_status()
+        if dl["state"] in ("downloading", "verifying"):
+            pct = int(100 * dl["downloaded"] / dl["total"]) if dl["total"] else 0
+            raise AIUnavailable(
+                f"The offline AI model is still downloading ({pct}%). "
+                "Please try again once it has finished."
+            ) from e
         raise AIUnavailable(
             "AI is not available on this device \u2014 no local model is configured "
             "and cloud generation is off. Ask your administrator to set it up in "
