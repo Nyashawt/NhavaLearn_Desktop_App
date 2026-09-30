@@ -1480,8 +1480,11 @@ routes.aiSettings = async () => {
   const status = await api().ai_get_status();
   const settings = s.settings;
 
+  const dl = status.ok ? status.model_download : null;
+  const dlActive = dl && (dl.state === "downloading" || dl.state === "verifying");
   const localBadge = status.ok && status.local_model_available
     ? `<span class="badge">found: ${esc(status.local_model_info?.model || "a .gguf model")}</span>`
+    : dlActive ? `<span class="badge inactive">downloading…</span>`
     : `<span class="badge inactive">no local model found</span>`;
   const cloudBadge = status.ok && status.cloud_configured
     ? `<span class="badge">key configured</span>`
@@ -1508,6 +1511,7 @@ routes.aiSettings = async () => {
     </div>
     <div class="card" style="max-width:560px">
       <h3 style="font-size:16px">Local model ${localBadge}</h3>
+      ${status.ok && !status.local_model_available ? `<div id="ai-dl" style="margin-bottom:14px"></div>` : ""}
       <label class="field">GGUF filename in the models folder <input id="ai-model" value="${esc(settings.model_filename || "")}" placeholder="leave blank to auto-pick the largest .gguf found"></label>
       <p class="sub" style="color:var(--muted)">Copy a .gguf model file into <code>%LOCALAPPDATA%\\NhavaLearn\\models</code>
         on this laptop, then enter its filename here (or leave blank to use the largest one found automatically).</p>
@@ -1522,6 +1526,40 @@ routes.aiSettings = async () => {
     r.ok ? go("aiSettings") : toast(r.error);
     if (r.ok) toast("AI settings saved");
   };
+
+  // First-run model download progress (see app/model_downloader.py).
+  const dlBox = document.getElementById("ai-dl");
+  if (!dlBox) return;
+  const mb = (n) => Math.round(n / 1048576).toLocaleString();
+  const render = (d) => {
+    const pct = d.total ? Math.floor(100 * d.downloaded / d.total) : 0;
+    if (d.state === "done") return go("aiSettings");
+    if (d.state === "downloading" || d.state === "verifying") {
+      dlBox.innerHTML = `
+        <div class="sub">${d.state === "verifying" ? "Checking the downloaded file…"
+          : `Downloading the offline AI model: ${mb(d.downloaded)} of ${mb(d.total)} MB (${pct}%)`}</div>
+        <progress max="100" value="${pct}" style="width:100%"></progress>
+        ${d.error ? `<div class="sub" style="color:var(--muted)">Connection problem, retrying: ${esc(d.error)}</div>` : ""}`;
+      return true;
+    }
+    dlBox.innerHTML = `
+      <div class="sub">${d.state === "error"
+        ? `The offline AI model could not be downloaded: ${esc(d.error || "unknown error")}. Check the internet connection and try again.`
+        : "The offline AI model has not been downloaded yet."}</div>
+      <button class="btn" id="ai-dl-retry" style="margin-top:8px"><i class="bi bi-download"></i> Download model (1.1 GB)</button>`;
+    document.getElementById("ai-dl-retry").onclick = async () => {
+      const r = await api().ai_download_model();
+      r.ok ? poll() : toast(r.error);
+    };
+    return false;
+  };
+  const poll = async () => {
+    if (!document.body.contains(dlBox)) return;  // navigated away
+    const s = await api().ai_get_status();
+    if (s.ok && render(s.model_download)) setTimeout(poll, 1500);
+  };
+  render(dl);
+  if (dlActive) setTimeout(poll, 1500);
 };
 
 /* ======================== Library documents (admin) =================== */

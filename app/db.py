@@ -150,7 +150,11 @@ CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
     INSERT INTO documents_fts(documents_fts, rowid, title, extracted_text) VALUES ('delete', old.id, old.title, old.extracted_text);
     INSERT INTO documents_fts(rowid, title, extracted_text) VALUES (new.id, new.title, new.extracted_text);
 END;
+"""
 
+# Indexes run after MIGRATIONS: on a database from an older build, a column
+# they reference (e.g. documents.grade) may only exist once migrated.
+INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_lessons_class   ON lessons(class_id);
 CREATE INDEX IF NOT EXISTS idx_pages_lesson    ON lesson_pages(lesson_id, page_number);
@@ -178,6 +182,7 @@ MIGRATIONS = [
     "ALTER TABLE settings ADD COLUMN ai_model_filename TEXT",
     "ALTER TABLE classes ADD COLUMN grade TEXT",
     "ALTER TABLE lesson_pages ADD COLUMN presentable INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE documents ADD COLUMN grade TEXT NOT NULL DEFAULT ''",
 ]
 
 
@@ -190,6 +195,7 @@ def init_db() -> None:
                 conn.execute(stmt)
             except sqlite3.OperationalError:
                 pass  # already applied
+        conn.executescript(INDEXES)
         # Seed subjects once (admin can add more later)
         count = conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
         if count == 0:

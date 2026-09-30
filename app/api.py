@@ -533,6 +533,15 @@ class Api:
         from . import ai_generator
         return {"ok": True, **ai_generator.get_ai_status()}
 
+    def ai_download_model(self):
+        """Admin "Retry" for the first-run model download (see model_downloader)."""
+        e = self._require("admin")
+        if e:
+            return e
+        from . import model_downloader
+        model_downloader.start_if_needed()
+        return {"ok": True, "download": model_downloader.get_status()}
+
     def ai_generate_and_create(self, class_id, kind, subject_id, topic, count=10, document_ids=None):
         """Generate a Lesson or a Test from the Classes screen and create the
         real record directly — replaces the old lesson-editor 'Generate with

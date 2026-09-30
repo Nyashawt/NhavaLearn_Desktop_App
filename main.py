@@ -12,12 +12,15 @@ import sys
 import webview
 
 from app.api import Api
-from app import db
+from app import db, model_downloader
 from app.paths import resource_path
 
 
 def main():
     db.init_db()
+    # First launch: fetch the offline AI model in the background (no-op once
+    # it's present) — it's too big to ship inside the installer.
+    model_downloader.start_if_needed()
     api = Api()
     api._main_window = webview.create_window(
         title="NhavaLearn",
